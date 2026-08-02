@@ -371,30 +371,29 @@ docker compose down -v
 
 ---
 
-## ☁️ Deploy ke Vercel
+## ☁️ Deploy ke Vercel (Monorepo — Satu Project)
 
-Backend (FastAPI) dan frontend (Vite) di-deploy sebagai **dua project Vercel terpisah** dari repo yang sama. Database memakai Supabase (lihat [Opsi C — Supabase](#️-opsi-c--supabase-direkomendasikan-untuk-produksi-deploy) di atas).
+Frontend (Vite) dan backend (FastAPI) di-deploy sebagai **satu project Vercel** dari repo ini. Database memakai Supabase (lihat [Opsi C — Supabase](#️-opsi-c--supabase-direkomendasikan-untuk-produksi-deploy) di atas).
 
-### 1. Backend
+Cara kerjanya (lihat [`vercel.json`](vercel.json)):
+- `buildCommand` men-build frontend (`frontend/dist`) sebagai output statis.
+- Request ke `/api/*` di-rewrite ke serverless function [`backend/api/index.py`](backend/api/index.py), yang me-mount FastAPI app asli ([`backend/app.py`](backend/app.py)) di bawah prefix `/api` — jadi rute asli seperti `/health`, `/optimize`, `/groups` otomatis bisa diakses lewat `/api/health`, `/api/optimize`, `/api/groups`, dst, cocok dengan yang dipanggil frontend ([`api.ts`](frontend/src/lib/api.ts)).
+- Request lainnya (selain `/api/*`) fallback ke `index.html` (SPA routing untuk React Router).
 
-1. Di Vercel Dashboard, **Add New Project** → import repo ini.
-2. **Root Directory**: biarkan default (root repo) — jangan diarahkan ke `backend/`. Konfigurasi ada di [`vercel.json`](vercel.json) (root) yang menunjuk ke `backend/api/index.py`.
-3. Framework preset: **Other**.
-4. Environment Variables (Project Settings → Environment Variables):
+### Langkah setup di Vercel Dashboard
+
+1. **Add New Project** → import repo ini.
+2. **Framework Preset**: `Other`.
+3. **Root Directory**: `./` (root repo) — **jangan** diisi `backend` atau `frontend`.
+4. **Build/Output/Install/Development Command**: biarkan toggle "Override" mati — semuanya sudah diatur lewat `vercel.json`.
+5. Environment Variables (Project Settings → Environment Variables):
    - `DATABASE_URL` — connection string **Transaction pooler** Supabase (port `6543`), lihat [`backend/.env.example`](backend/.env.example).
-   - `CORS_ORIGINS` — domain frontend Vercel setelah deploy (bisa diisi `*` dulu sementara frontend belum punya domain final, lalu dipersempit).
-5. Deploy. Endpoint akan tersedia di `https://<project-backend>.vercel.app` (mis. `/health`, `/optimize`, `/docs`).
+   - `CORS_ORIGINS` — **tidak wajib** untuk setup ini karena frontend & backend satu domain (same-origin, tidak kena CORS). Boleh dikosongkan/`*`.
+6. Deploy. Frontend ada di `https://<project>.vercel.app`, API di `https://<project>.vercel.app/api/...` (mis. `/api/health`, `/api/docs`).
 
-> ⚠️ **Catatan durasi & paket Vercel:** endpoint `/optimize` bisa berjalan sampai ~35 detik (`TIME_LIMIT_SEC` + buffer di [`settings.py`](backend/settings.py) & [`app.py`](backend/app.py)). [`vercel.json`](vercel.json) sudah men-set `maxDuration: 60`. Cek di Vercel Dashboard bahwa paket Anda mengizinkan durasi tsb (limit berubah dari waktu ke waktu — lihat [dokumentasi Function Duration Vercel](https://vercel.com/docs/functions/configuring-functions/duration) terkini). Jika dibatasi lebih rendah, turunkan `TIME_LIMIT_SEC` di `settings.py` agar tetap di bawah limit.
+> ⚠️ **Catatan durasi & paket Vercel:** endpoint `/api/optimize` bisa berjalan sampai ~35 detik (`TIME_LIMIT_SEC` + buffer di [`settings.py`](backend/settings.py) & [`app.py`](backend/app.py)). `vercel.json` sudah men-set `maxDuration: 60`. Cek di Vercel Dashboard bahwa paket Anda mengizinkan durasi tsb (limit berubah dari waktu ke waktu — lihat [dokumentasi Function Duration Vercel](https://vercel.com/docs/functions/configuring-functions/duration) terkini). Jika dibatasi lebih rendah, turunkan `TIME_LIMIT_SEC` di `settings.py` agar tetap di bawah limit.
 
-### 2. Frontend
-
-1. **Add New Project** lagi dari repo yang sama.
-2. **Root Directory**: `frontend`. Framework preset **Vite** akan terdeteksi otomatis.
-3. Environment Variables:
-   - `VITE_API_BASE_URL` — URL backend dari langkah sebelumnya, mis. `https://meta-vrp-backend.vercel.app` (tanpa trailing slash).
-4. Deploy.
-5. Kembali ke project **backend**, update `CORS_ORIGINS` dengan domain frontend yang baru jadi (mis. `https://meta-vrp.vercel.app`), lalu redeploy backend.
+> 💡 Karena satu domain, `frontend/.env` / `VITE_API_BASE_URL` **tidak perlu diisi** di production — default `/api` di [`api.ts`](frontend/src/lib/api.ts) sudah benar.
 
 ---
 
