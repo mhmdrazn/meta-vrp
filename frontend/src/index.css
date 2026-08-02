@@ -1,0 +1,178 @@
+/* =================================================================
+   index.css (FINAL FIX)
+   ================================================================= */
+
+/* 1. SEMUA IMPORT HARUS DI PALING ATAS (Standard CSS Rule) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap');
+@import 'leaflet/dist/leaflet.css';
+
+/* 2. Direktif Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 3. VARIABLE WARNA (MODERN GREEN THEME) */
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 150 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 150 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 10% 10%;
+    --primary: 142 71% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 140 20% 96%;
+    --secondary-foreground: 142 50% 25%;
+    --muted: 140 15% 95%;
+    --muted-foreground: 150 10% 45%;
+    --accent: 142 60% 94%;
+    --accent-foreground: 142 71% 30%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 140 15% 90%;
+    --input: 140 15% 90%;
+    --ring: 142 71% 35%;
+    --radius: 0.75rem;
+    --font-sans: 'Inter', sans-serif;
+
+    /* Custom design tokens */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  }
+
+  .dark {
+    --background: 150 15% 6%;
+    --foreground: 140 10% 95%;
+    --card: 150 15% 8%;
+    --card-foreground: 140 10% 95%;
+    --popover: 150 15% 8%;
+    --popover-foreground: 140 10% 95%;
+    --primary: 142 60% 50%;
+    --primary-foreground: 150 15% 6%;
+    --secondary: 150 15% 14%;
+    --secondary-foreground: 140 10% 90%;
+    --muted: 150 15% 14%;
+    --muted-foreground: 140 10% 60%;
+    --accent: 142 40% 18%;
+    --accent-foreground: 142 60% 70%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 15% 16%;
+    --input: 150 15% 16%;
+    --ring: 142 60% 50%;
+
+    /* Dark mode shadow tokens */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Focus ring improvements */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* 4. KOMPONEN CUSTOM (@apply) */
+@layer components {
+  .input {
+    @apply px-3 py-2.5 rounded-lg border border-input bg-background/50 backdrop-blur-sm;
+    @apply transition-all duration-200 ease-out;
+    @apply hover:border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/20;
+  }
+
+  .card {
+    @apply rounded-2xl border bg-card;
+    box-shadow: var(--shadow-card);
+    @apply transition-shadow duration-200;
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-h {
+    @apply px-5 py-4 border-b text-sm font-semibold;
+  }
+  .card-b {
+    @apply p-5;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold;
+    @apply bg-primary text-primary-foreground;
+    @apply transition-all duration-200 ease-out;
+    @apply hover:brightness-110 hover:shadow-md active:scale-[0.98];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium;
+    @apply bg-secondary text-secondary-foreground;
+    @apply transition-all duration-200 hover:bg-secondary/80;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium;
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted;
+    @apply transition-colors duration-150;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    @apply transition-colors duration-150;
+  }
+
+  /* Glassmorphism utility */
+  .glass {
+    @apply bg-background/80 backdrop-blur-md border border-border/50;
+  }
+
+  /* Gradient text utility */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-emerald-500 bg-clip-text text-transparent;
+  }
+}
+
+/* 5. CSS MURNI (NON-TAILWIND) */
+
+/* Custom scrollbar */
+.app-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary)) transparent;
+}
+
+.app-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.app-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+}
+
+.app-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary-foreground));
+}
