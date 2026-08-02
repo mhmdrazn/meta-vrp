@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,3 +28,4 @@ class OptimizeResponse(BaseModel):
     vehicle_used: int
     routes: List[RouteResult]
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    job_id: Optional[str] = None

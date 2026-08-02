@@ -7,9 +7,7 @@ on:
     branches: [ "main", "dev" ] # Jalan saat PR ke main atau dev
 
 jobs:
-  # ==============================
   # JOB 1: FRONTEND QUALITY CHECK
-  # ==============================
   frontend-check:
     name: Frontend (Lint & Format)
     runs-on: ubuntu-latest
@@ -41,9 +39,7 @@ jobs:
       - name: Check Types (TypeScript)
         run: npx tsc --noEmit
 
-  # ==============================
   # JOB 2: BACKEND QUALITY CHECK
-  # ==============================
   backend-check:
     name: Backend (Lint & Format)
     runs-on: ubuntu-latest
@@ -73,3 +69,18 @@ jobs:
 
       - name: Check Linting (Ruff)
         run: ruff check .
+
+  # JOB 3: SUPABASE KEEP ALIVE
+  supabase-keep-alive:
+    name: Supabase Keep Alive
+    on:
+      schedule:
+        - cron: '0 0 */3 * *'
+    jobs:
+      ping:
+        runs-on: ubuntu-latest
+        steps:
+           - run: |
+               curl -X GET '${{ secrets.SUPABASE_URL }}/rest/v1/users?select=count' \
+                 -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+                 -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
