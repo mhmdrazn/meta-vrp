@@ -377,7 +377,7 @@ Frontend (Vite) dan backend (FastAPI) di-deploy sebagai **satu project Vercel** 
 
 Cara kerjanya (lihat [`vercel.json`](vercel.json)):
 - `buildCommand` men-build frontend (`frontend/dist`) sebagai output statis.
-- Request ke `/api/*` di-rewrite ke serverless function [`backend/api/index.py`](backend/api/index.py), yang me-mount FastAPI app asli ([`backend/app.py`](backend/app.py)) di bawah prefix `/api` — jadi rute asli seperti `/health`, `/optimize`, `/groups` otomatis bisa diakses lewat `/api/health`, `/api/optimize`, `/api/groups`, dst, cocok dengan yang dipanggil frontend ([`api.ts`](frontend/src/lib/api.ts)).
+- Request ke `/api/*` di-rewrite ke serverless function [`api/index.py`](api/index.py) (harus di top-level folder `api/` — syarat Vercel), yang me-mount FastAPI app asli ([`backend/app.py`](backend/app.py)) di bawah prefix `/api` — jadi rute asli seperti `/health`, `/optimize`, `/groups` otomatis bisa diakses lewat `/api/health`, `/api/optimize`, `/api/groups`, dst, cocok dengan yang dipanggil frontend ([`api.ts`](frontend/src/lib/api.ts)).
 - Request lainnya (selain `/api/*`) fallback ke `index.html` (SPA routing untuk React Router).
 
 ### Langkah setup di Vercel Dashboard
