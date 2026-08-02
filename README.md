@@ -40,7 +40,7 @@
 **Backend:**
 * **Framework:** FastAPI (Python 3.10+)
 * **Computation:** NumPy, Pandas
-* **Database:** PostgreSQL (Production) / SQLite (Development)
+* **Database:** PostgreSQL — [Supabase](https://supabase.com) (direkomendasikan) atau PostgreSQL lokal/Docker
 * **ORM:** SQLAlchemy + Psycopg (v3)
 * **Routing API:** OSRM Integration
 
@@ -89,16 +89,17 @@ docker run --name meta-vrp-pg \
   -d postgres:16
 ```
 
-**Jalankan Migrasi Database:**
+**Jalankan Migrasi Database** (dua file, urut — `001_init_schema.sql` membuat tabel dasar, `schema_additions.sql` menambah kolom/tabel pendukung):
 
 **Cara 1 — Copy file ke container lalu eksekusi**
 
 ```bash
 # Dari root repository
+docker cp backend/migrations/001_init_schema.sql meta-vrp-pg:/001_init_schema.sql
 docker cp backend/migrations/schema_additions.sql meta-vrp-pg:/schema_additions.sql
 
-docker exec -it meta-vrp-pg psql \
-  -U meta -d meta_vrp -f /schema_additions.sql
+docker exec -it meta-vrp-pg psql -U meta -d meta_vrp -f /001_init_schema.sql
+docker exec -it meta-vrp-pg psql -U meta -d meta_vrp -f /schema_additions.sql
 # Password: dev
 ```
 
@@ -108,9 +109,15 @@ docker exec -it meta-vrp-pg psql \
 # macOS / Linux:
 docker run --rm -i --network host \
   -v "$(pwd)/backend/migrations:/migrations" postgres:16 \
+  psql -h localhost -U meta -d meta_vrp -f /migrations/001_init_schema.sql
+docker run --rm -i --network host \
+  -v "$(pwd)/backend/migrations:/migrations" postgres:16 \
   psql -h localhost -U meta -d meta_vrp -f /migrations/schema_additions.sql
 
 # Windows PowerShell:
+docker run --rm -i --network host `
+  -v "${PWD}\backend\migrations:/migrations" postgres:16 `
+  psql -h localhost -U meta -d meta_vrp -f /migrations/001_init_schema.sql
 docker run --rm -i --network host `
   -v "${PWD}\backend\migrations:/migrations" postgres:16 `
   psql -h localhost -U meta -d meta_vrp -f /migrations/schema_additions.sql
@@ -134,10 +141,28 @@ GRANT ALL PRIVILEGES ON DATABASE meta_vrp TO meta;
 
 ```bash
 psql "postgresql://meta:dev@localhost:5432/meta_vrp" \
+  -f backend/migrations/001_init_schema.sql
+psql "postgresql://meta:dev@localhost:5432/meta_vrp" \
   -f backend/migrations/schema_additions.sql
 ```
 
-> 💡 **Tips:** SQL migration menggunakan `IF NOT EXISTS` sehingga aman dijalankan berulang kali.
+> 💡 **Tips:** Kedua file SQL migration menggunakan `IF NOT EXISTS` sehingga aman dijalankan berulang kali.
+
+---
+
+### ☁️ Opsi C — Supabase (direkomendasikan untuk produksi/deploy)
+
+1. Buat project baru di [supabase.com](https://supabase.com) (gratis untuk mulai).
+2. Buka **Project Settings > Database > Connection string**, salin dua jenis URI:
+   - **Session pooler** (port `5432`) — untuk dev lokal / proses long-lived.
+   - **Transaction pooler** (port `6543`, host `...pooler.supabase.com`) — **wajib** dipakai saat backend di-deploy sebagai serverless function (mis. Vercel), supaya jumlah koneksi ke Postgres tidak membludak.
+3. Jalankan migrasi via **SQL Editor** di Supabase Dashboard: paste isi `backend/migrations/001_init_schema.sql`, jalankan, lalu paste isi `backend/migrations/schema_additions.sql`, jalankan.
+   - Atau via `psql` dari lokal:
+     ```bash
+     psql "<connection-string-supabase>" -f backend/migrations/001_init_schema.sql
+     psql "<connection-string-supabase>" -f backend/migrations/schema_additions.sql
+     ```
+4. Isi `DATABASE_URL` di `backend/.env` dengan connection string tersebut (lihat `backend/.env.example`). Kode backend ([database.py](backend/database.py)) otomatis mendeteksi host `pooler.supabase.com` dan menyesuaikan strategi pooling + `sslmode=require`.
 
 ---
 
@@ -207,10 +232,12 @@ npm install
 
 ### 2. Konfigurasi Environment Variables
 
-Buat file `.env` di folder `frontend/`:
+Untuk dev lokal, **biarkan `frontend/.env` kosong / tidak perlu dibuat** — Vite proxy di `vite.config.ts` sudah meneruskan `/api` ke backend lokal (`http://127.0.0.1:8000`).
+
+`VITE_API_BASE_URL` hanya perlu diisi saat build produksi di mana frontend & backend berjalan di domain terpisah (lihat bagian [Deploy ke Vercel](#-deploy-ke-vercel)):
 
 ```env
-VITE_API_BASE=http://localhost:8000
+VITE_API_BASE_URL=https://meta-vrp-backend.vercel.app
 ```
 
 ### 3. Jalankan Development Server
@@ -309,7 +336,7 @@ services:
   frontend:
     build: ./frontend
     environment:
-      VITE_API_BASE: http://localhost:8000
+      VITE_API_BASE_URL: http://localhost:8000
     depends_on:
       - backend
     ports:
@@ -341,6 +368,33 @@ docker compose down
 # Atau dengan menghapus volumes:
 docker compose down -v
 ```
+
+---
+
+## ☁️ Deploy ke Vercel
+
+Backend (FastAPI) dan frontend (Vite) di-deploy sebagai **dua project Vercel terpisah** dari repo yang sama. Database memakai Supabase (lihat [Opsi C — Supabase](#️-opsi-c--supabase-direkomendasikan-untuk-produksi-deploy) di atas).
+
+### 1. Backend
+
+1. Di Vercel Dashboard, **Add New Project** → import repo ini.
+2. **Root Directory**: biarkan default (root repo) — jangan diarahkan ke `backend/`. Konfigurasi ada di [`vercel.json`](vercel.json) (root) yang menunjuk ke `backend/api/index.py`.
+3. Framework preset: **Other**.
+4. Environment Variables (Project Settings → Environment Variables):
+   - `DATABASE_URL` — connection string **Transaction pooler** Supabase (port `6543`), lihat [`backend/.env.example`](backend/.env.example).
+   - `CORS_ORIGINS` — domain frontend Vercel setelah deploy (bisa diisi `*` dulu sementara frontend belum punya domain final, lalu dipersempit).
+5. Deploy. Endpoint akan tersedia di `https://<project-backend>.vercel.app` (mis. `/health`, `/optimize`, `/docs`).
+
+> ⚠️ **Catatan durasi & paket Vercel:** endpoint `/optimize` bisa berjalan sampai ~35 detik (`TIME_LIMIT_SEC` + buffer di [`settings.py`](backend/settings.py) & [`app.py`](backend/app.py)). [`vercel.json`](vercel.json) sudah men-set `maxDuration: 60`. Cek di Vercel Dashboard bahwa paket Anda mengizinkan durasi tsb (limit berubah dari waktu ke waktu — lihat [dokumentasi Function Duration Vercel](https://vercel.com/docs/functions/configuring-functions/duration) terkini). Jika dibatasi lebih rendah, turunkan `TIME_LIMIT_SEC` di `settings.py` agar tetap di bawah limit.
+
+### 2. Frontend
+
+1. **Add New Project** lagi dari repo yang sama.
+2. **Root Directory**: `frontend`. Framework preset **Vite** akan terdeteksi otomatis.
+3. Environment Variables:
+   - `VITE_API_BASE_URL` — URL backend dari langkah sebelumnya, mis. `https://meta-vrp-backend.vercel.app` (tanpa trailing slash).
+4. Deploy.
+5. Kembali ke project **backend**, update `CORS_ORIGINS` dengan domain frontend yang baru jadi (mis. `https://meta-vrp.vercel.app`), lalu redeploy backend.
 
 ---
 
@@ -434,7 +488,7 @@ echo "CORS_ORIGINS=http://localhost:5173" >> .env
 # Frontend setup
 cd ../frontend
 npm install
-echo "VITE_API_BASE=http://localhost:8000" > .env
+# (tidak perlu .env untuk dev lokal — pakai Vite proxy)
 
 # ============================================
 # DAILY DEVELOPMENT

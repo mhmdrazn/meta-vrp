@@ -1,6 +1,7 @@
 # app.py
 import logging
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FTimeout
 from datetime import datetime, timezone
@@ -48,10 +49,17 @@ app = FastAPI(
     swagger_ui_parameters={"displayRequestDuration": True, "tryItOutEnabled": True},
 )
 
+_cors_origins_env = os.getenv("CORS_ORIGINS", "*")
+_cors_origins = (
+    ["*"]
+    if _cors_origins_env.strip() == "*"
+    else [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

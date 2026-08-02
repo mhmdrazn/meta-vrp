@@ -9,8 +9,14 @@ import type { Geometry } from 'geojson'
 
 const OSRM_BASE_URL = 'https://router.project-osrm.org'
 
+// Dev lokal: kosong -> pakai '/api' (diteruskan oleh proxy Vite ke backend lokal).
+// Produksi: isi VITE_API_BASE_URL dengan URL backend (mis. saat FE & BE dua project Vercel terpisah).
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL}`
+  : '/api'
+
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 90000,
 })
 

@@ -1,11 +1,22 @@
+import os
 from dataclasses import dataclass
+from pathlib import Path
+
+# Resolusi absolut relatif terhadap folder backend/, supaya tidak bergantung
+# pada current working directory (penting untuk deployment serverless spt Vercel).
+_BACKEND_DIR = Path(__file__).resolve().parent
+_DEFAULT_DATA_DIR = _BACKEND_DIR / "data"
 
 
 @dataclass
 class Settings:
     # === data paths ===
-    DATA_NODES_PATH: str = "data/nodes.csv"
-    DATA_MATRIX_PATH: str = "data/time_matrix.csv"
+    DATA_NODES_PATH: str = os.getenv(
+        "DATA_NODES_PATH", str(_DEFAULT_DATA_DIR / "nodes.csv")
+    )
+    DATA_MATRIX_PATH: str = os.getenv(
+        "DATA_MATRIX_PATH", str(_DEFAULT_DATA_DIR / "time_matrix.csv")
+    )
 
     # === fixed operational params ===
     DEPOT_ID: str = "0"
