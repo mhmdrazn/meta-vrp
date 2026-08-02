@@ -1,4 +1,5 @@
 import type { Geometry } from 'geojson'
+export type { Geometry }
 export type NodeId = string
 
 export interface OptimizeRoute {

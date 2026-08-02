@@ -18,7 +18,7 @@ type StatusUI = {
 
 export const useStatusUI = create<StatusUI>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       selectedJobId: '',
       perVeh: {},
       perStep: {},

@@ -15,7 +15,7 @@ import { useAllNodes } from "../hooks/useAllNodes";
 
 // --- SHADCN UI ---
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -33,7 +33,6 @@ import { Badge } from "@/components/ui/badge";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
@@ -60,14 +59,12 @@ import {
     CheckCircle2,
     AlertCircle,
     ListTree,
-    Truck,
     FileDown,
     Eye,
     EyeOff,
     X,
     Droplets,
     TreeDeciduous,
-    BarChart3,
 } from "lucide-react";
 
 const ROUTE_COLORS = [
@@ -142,7 +139,7 @@ export default function OptimizePage() {
     const selectedParks = useMemo(() => {
         return Array.from(selected)
             .map((id) => nodesById.get(id))
-            .filter((n): n is Node => Boolean(n) && n.kind === "park")
+            .filter((n): n is Node => n != null && n.kind === "park")
             .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
     }, [selected, nodesById]);
 
@@ -184,7 +181,6 @@ export default function OptimizePage() {
         mutate,
         isPending,
         error: optimizeError,
-        data: optimizeData,
         reset: resetOptimize,
     } = useMutation({
         mutationFn: (payload: any) => Api.optimize(payload),
@@ -201,7 +197,7 @@ export default function OptimizePage() {
                 action: <CheckCircle2 className="h-5 w-5 text-green-500" />,
             });
         },
-        onError: (err: any) => {
+        onError: () => {
             /* ... */
         },
     });
@@ -488,7 +484,7 @@ export default function OptimizePage() {
             }
 
             // Footer Nomor Halaman
-            const pageCount = pdf.internal.getNumberOfPages();
+            const pageCount = pdf.getNumberOfPages();
             for (let i = 1; i <= pageCount; i++) {
                 pdf.setPage(i);
                 pdf.setFontSize(8);
@@ -513,13 +509,6 @@ export default function OptimizePage() {
         }
     };
 
-    const summary = useMemo(() => {
-        if (!data) return null;
-        const totRoute = data.routes.length;
-        const totSeq = data.routes.reduce((s, r) => s + r.sequence.length, 0);
-        return { totRoute, totSeq };
-    }, [data]);
-
     const canRun = !isPending && maxVehicles > 0 && selected.size > 0;
 
     const filteredGroups = useMemo(() => {
@@ -530,7 +519,7 @@ export default function OptimizePage() {
     }, [groupsQ.data, groupQuery]);
 
     useEffect(() => {
-        let timer: NodeJS.Timeout | undefined;
+        let timer: ReturnType<typeof setInterval> | undefined;
         if (isPending) {
             setProgress(0);
             const interval = 300;
@@ -1366,16 +1355,6 @@ export default function OptimizePage() {
                                                                                 0),
                                                                         0,
                                                                     );
-
-                                                            // max load dari profil muatan (kalau mau dipakai)
-                                                            const maxLoad =
-                                                                r
-                                                                    .load_profile_liters
-                                                                    .length > 0
-                                                                    ? Math.max(
-                                                                          ...r.load_profile_liters,
-                                                                      )
-                                                                    : 0;
 
                                                             return (
                                                                 <div className="flex flex-wrap gap-2">

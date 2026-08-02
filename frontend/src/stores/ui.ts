@@ -13,8 +13,8 @@ interface UIState {
     toggleSidebar: () => void;
 }
 
-export const useUI = create(
-    persist<UIState>(
+export const useUI = create<UIState>()(
+    persist(
         (set) => ({
             maxVehicles: 5,
             setMaxVehicles: (n) => set({ maxVehicles: n }),
