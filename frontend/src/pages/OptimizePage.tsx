@@ -2,11 +2,13 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Api } from "../lib/api";
-import type { OptimizeResponse, Node, Group, Geometry } from "../types";
+import type { OptimizeResponse, Node, Geometry, Dataset, RefillAvailability } from "../types";
 import { minutesToHHMM } from "../lib/format";
 import { getDemandColor } from "../lib/utils";
 import NodesMapSelector from "../components/NodesMapSelector";
+import { DemoDisclaimer } from "../components/DemoDisclaimer";
 import { useUI } from "../stores/ui";
+import { useDataset } from "../stores/dataset";
 import { useOptimizeMem } from "../stores/optimize";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -14,17 +16,22 @@ import OptimizeResultMap from "../components/OptimizeResultMap";
 import { useAllNodes } from "../hooks/useAllNodes";
 
 // --- SHADCN UI ---
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
     Card,
     CardHeader,
     CardTitle,
     CardContent,
-    CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,9 +59,7 @@ import {
     Play,
     Trash2,
     ListChecks,
-    Users,
     MapPin,
-    Settings,
     Search,
     CheckCircle2,
     AlertCircle,
@@ -84,12 +89,21 @@ export default function OptimizePage() {
         isLoading: isLoadingNodes,
         isError: isErrorNodes,
     } = useAllNodes();
-    const groupsQ = useQuery<Group[]>({
-        queryKey: ["groups"],
-        queryFn: Api.listGroups,
+    // Available datasets from backend (data-driven Dataset A/B selector).
+    const datasetsQ = useQuery<Dataset[]>({
+        queryKey: ["datasets"],
+        queryFn: Api.listDatasets,
+        staleTime: 5 * 60_000,
     });
 
+    const { datasetId, setDatasetId } = useDataset();
     const { maxVehicles, setMaxVehicles, selected, setSelected } = useUI();
+
+    // Refill availability control (100% / 50% / 25%).
+    // Deterministic subset: keep every Nth refill (indices sorted). Reviewer-friendly —
+    // reproducible without needing a seed input in the UI.
+    const [refillAvailability, setRefillAvailability] =
+        useState<RefillAvailability>(100);
 
     const [vehicleRoutes, setVehicleRoutes] = useState<
         Record<number, Geometry[]>
@@ -174,7 +188,6 @@ export default function OptimizePage() {
     const { toast } = useToast();
     const { lastResult, setLastResult, clearLastResult } = useOptimizeMem();
 
-    const [groupQuery, setGroupQuery] = useState("");
     const [progress, setProgress] = useState(0);
 
     const {
@@ -190,10 +203,10 @@ export default function OptimizePage() {
                 selected_node_ids: variables?.selected_node_ids ?? [],
             });
             toast({
-                title: "Optimisasi Selesai",
+                title: "Optimization Complete",
                 description: `Objective ${
                     res.objective_time_min
-                } menit (${minutesToHHMM(res.objective_time_min)})`,
+                } min (${minutesToHHMM(res.objective_time_min)})`,
                 action: <CheckCircle2 className="h-5 w-5 text-green-500" />,
             });
         },
@@ -212,6 +225,27 @@ export default function OptimizePage() {
         resetOptimize();
     };
 
+    // Switching datasets: park ids are not comparable across datasets, so a full reset
+    // is the only sensible behaviour.
+    const handleDatasetChange = (newId: string) => {
+        if (newId === datasetId) return;
+        setDatasetId(newId);
+        clearAll();
+    };
+
+    // Compute a deterministic refill subset for the selected availability level.
+    // 100% -> all refills, 50% -> every 2nd, 25% -> every 4th (sorted by id).
+    const buildRefillSubset = (): string[] | null => {
+        if (refillAvailability === 100) return null;
+        const allRefills = nodes
+            .filter((n) => n.kind === "refill")
+            .map((n) => n.id)
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        if (allRefills.length === 0) return [];
+        const step = refillAvailability === 50 ? 2 : 4;
+        return allRefills.filter((_, i) => i % step === 0);
+    };
+
     const handleRun = () => {
         const node_ids = Array.from(selected);
         setVehicleRoutes({});
@@ -220,6 +254,11 @@ export default function OptimizePage() {
         mutate({
             num_vehicles: maxVehicles,
             selected_node_ids: node_ids,
+            dataset_id: datasetId,
+            algorithm: "alns_hybrid",
+            refill_ids_override: buildRefillSubset(),
+            // Shorter demo budget so reviewers don't wait too long on a busy Vercel function.
+            time_limit_sec: 10,
         });
     };
 
@@ -280,25 +319,6 @@ export default function OptimizePage() {
         setHighlightedVehicleId(null);
         resetOptimize();
     };
-    const applyGroup = (group: Group) => {
-        if (!group.nodeIds || group.nodeIds.length === 0) {
-            toast({
-                title: "Group Kosong",
-                description: "Group ini tidak memiliki titik lokasi.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        const newSelection = new Set(group.nodeIds);
-        setSelected(newSelection);
-
-        toast({
-            title: "Group Diterapkan",
-            description: `Berhasil memilih ${newSelection.size} titik dari group "${group.name}".`,
-        });
-    };
-
     // ============================================================
     // 👇 FUNGSI EXPORT PDF DIPERBAIKI LAGI (LAYOUT LEBIH RAPI) 👇
     // ============================================================
@@ -323,7 +343,7 @@ export default function OptimizePage() {
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(20);
             pdf.setTextColor(33, 33, 33);
-            pdf.text("Laporan Optimasi MetaVRP", margin, currentY);
+            pdf.text("MetaVRP Optimization Report", margin, currentY);
             currentY += 10;
 
             pdf.setDrawColor(200, 200, 200);
@@ -335,21 +355,21 @@ export default function OptimizePage() {
             pdf.setFontSize(11);
             pdf.setTextColor(60, 60, 60);
 
-            const dateStr = new Date().toLocaleDateString("id-ID", {
+            const dateStr = new Date().toLocaleDateString("en-US", {
                 dateStyle: "full",
             });
-            pdf.text(`Tanggal Laporan : ${dateStr}`, margin, currentY);
+            pdf.text(`Report Date : ${dateStr}`, margin, currentY);
             currentY += 6;
             pdf.text(
-                `Total Kendaraan : ${data.vehicle_used} Unit`,
+                `Vehicles Used : ${data.vehicle_used}`,
                 margin,
                 currentY,
             );
             currentY += 6;
             pdf.text(
-                `Total Waktu : ${
+                `Total Time : ${
                     data.objective_time_min
-                } menit (${minutesToHHMM(data.objective_time_min)})`,
+                } min (${minutesToHHMM(data.objective_time_min)})`,
                 margin,
                 currentY,
             );
@@ -391,7 +411,7 @@ export default function OptimizePage() {
                 pdf.setFontSize(12);
                 pdf.setTextColor(0, 0, 0);
                 pdf.text(
-                    `Rute Kendaraan #${route.vehicle_id}`,
+                    `Vehicle #${route.vehicle_id} Route`,
                     margin + 3,
                     currentY + 7,
                 );
@@ -411,14 +431,14 @@ export default function OptimizePage() {
                 // Detail Statistik
                 pdf.setFont("helvetica", "bold");
                 pdf.setFontSize(10);
-                pdf.text("Statistik & Muatan:", margin, currentY);
+                pdf.text("Statistics & Load:", margin, currentY);
                 currentY += 5;
 
                 pdf.setFont("helvetica", "normal");
                 pdf.setFontSize(10);
                 pdf.setTextColor(50, 50, 50);
                 pdf.text(
-                    `• Total Waktu: ${route.total_time_min} menit (${minutesToHHMM(route.total_time_min)})`,
+                    `• Total Time: ${route.total_time_min} min (${minutesToHHMM(route.total_time_min)})`,
                     margin + 5,
                     currentY,
                 );
@@ -427,7 +447,7 @@ export default function OptimizePage() {
                 // --- PERBAIKAN TAMPILAN PROFIL MUATAN ---
                 // Gunakan koma agar lebih ringkas dan mudah dibaca
                 const loadStr = route.load_profile_liters.join(", ");
-                const loadPrefix = "• Profil Muatan (L): ";
+                const loadPrefix = "• Load Profile (L): ";
                 const fullLoadText = loadPrefix + "[ " + loadStr + " ]";
 
                 // Split text agar tidak keluar margin
@@ -449,7 +469,7 @@ export default function OptimizePage() {
                 // Urutan Kunjungan
                 pdf.setFont("helvetica", "bold");
                 pdf.setTextColor(0, 0, 0);
-                pdf.text("Urutan Kunjungan:", margin, currentY);
+                pdf.text("Visit Sequence:", margin, currentY);
                 currentY += 6;
 
                 pdf.setFont("helvetica", "normal");
@@ -466,7 +486,7 @@ export default function OptimizePage() {
                     if (node?.kind === "depot") extraInfo = " [DEPOT]";
                     else if (node?.kind === "refill") extraInfo = " [REFILL]";
                     else if (node?.demand)
-                        extraInfo = ` (Butuh: ${node.demand.toLocaleString()} L)`;
+                        extraInfo = ` (Demand: ${node.demand.toLocaleString()} L)`;
 
                     const lineText = `${idx + 1}. ${nodeName}${extraInfo}`;
 
@@ -490,7 +510,7 @@ export default function OptimizePage() {
                 pdf.setFontSize(8);
                 pdf.setTextColor(150);
                 pdf.text(
-                    `Halaman ${i} dari ${pageCount}`,
+                    `Page ${i} of ${pageCount}`,
                     pageWidth - margin,
                     pageHeight - 8,
                     {
@@ -499,10 +519,10 @@ export default function OptimizePage() {
                 );
             }
 
-            pdf.save("laporan-rute-metavrp.pdf");
+            pdf.save("metavrp-route-report.pdf");
         } catch (err) {
             console.error("Export error:", err);
-            toast({ title: "Gagal Export PDF", variant: "destructive" });
+            toast({ title: "PDF Export Failed", variant: "destructive" });
         } finally {
             setHighlightedVehicleId(previousHighlight);
             setIsExporting(false);
@@ -510,13 +530,6 @@ export default function OptimizePage() {
     };
 
     const canRun = !isPending && maxVehicles > 0 && selected.size > 0;
-
-    const filteredGroups = useMemo(() => {
-        if (!groupsQ.data) return [];
-        return groupsQ.data.filter((g) =>
-            groupQuery.trim() ? g.name.includes(groupQuery) : true,
-        );
-    }, [groupsQ.data, groupQuery]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setInterval> | undefined;
@@ -549,18 +562,18 @@ export default function OptimizePage() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-4">
                     <div className="space-y-1">
                         <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                            Optimasi Rute
+                            Route Optimization
                         </h1>
                         <p className="text-muted-foreground text-sm">
-                            Pilih titik taman, atur parameter, dan jalankan
-                            kalkulasi rute
+                            Select park locations, configure parameters, and run
+                            the routing calculation.
                         </p>
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-3">
                         <div className="flex items-center gap-3 px-4 py-2.5 border rounded-xl bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
                             <ListChecks className="h-5 w-5 text-primary" />
                             <span className="font-medium text-sm">
-                                Titik Dipilih
+                                Selected
                             </span>
                             <Badge
                                 variant="default"
@@ -571,9 +584,12 @@ export default function OptimizePage() {
                         </div>
                     </div>
                 </div>
+                <div className="px-6 pb-6">
+                    <DemoDisclaimer />
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-0">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Kiri: Peta + Legend */}
                 <div
                     className="lg:col-span-7 flex flex-col gap-4 z-0"
@@ -586,8 +602,8 @@ export default function OptimizePage() {
                                 <MapPin className="h-5 w-5 text-primary" />
                                 <CardTitle className="text-lg">
                                     {data
-                                        ? "Peta Hasil Rute"
-                                        : "Peta Titik Taman"}
+                                        ? "Route Result Map"
+                                        : "Park Location Map"}
                                 </CardTitle>
                             </div>
                             {!data && (
@@ -597,14 +613,14 @@ export default function OptimizePage() {
                                         size="sm"
                                         onClick={selectAll}
                                     >
-                                        Pilih Semua
+                                        Select All
                                     </Button>
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         onClick={clearAll}
                                     >
-                                        Bersihkan
+                                        Clear
                                     </Button>
                                 </div>
                             )}
@@ -723,43 +739,47 @@ export default function OptimizePage() {
                     )}
                 </div>
 
-                {/* Kanan: Kontrol */}
+                {/* Right column: Controls (Settings only — Groups tab retired in demo mode) */}
                 <div className="lg:col-span-5 flex flex-col min-h-0">
-                    <Tabs
-                        defaultValue="settings"
-                        className="w-full flex-1 flex flex-col min-h-0"
-                    >
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="settings">
-                                <Settings className="mr-2 h-4 w-4" />
-                                Pengaturan
-                            </TabsTrigger>
-                            <TabsTrigger value="groups">
-                                <Users className="mr-2 h-4 w-4" />
-                                Groups
-                            </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent
-                            value="settings"
-                            className="flex-1 flex flex-col gap-4 mt-4 min-h-0 data-[state=inactive]:hidden"
-                        >
+                    <div className="flex-1 flex flex-col gap-4 min-h-0">
                             <Card>
                                 <CardHeader className="py-3">
                                     <CardTitle className="text-base">
-                                        Parameter Optimasi
+                                        Optimization Parameters
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
+                                    {/* Dataset selector (TASK 8) */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="dataset-select">
+                                            Dataset
+                                        </Label>
+                                        <Select
+                                            value={datasetId}
+                                            onValueChange={handleDatasetChange}
+                                        >
+                                            <SelectTrigger id="dataset-select">
+                                                <SelectValue placeholder="Select a dataset" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {(datasetsQ.data ?? []).map((d) => (
+                                                    <SelectItem key={d.id} value={d.id}>
+                                                        {d.label} — {d.park_count} parks, {d.refill_count} refills
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
                                     <div className="space-y-2">
                                         <Label htmlFor="park-search">
-                                            Cari Taman
+                                            Search Parks
                                         </Label>
                                         <div className="relative">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                             <Input
                                                 id="park-search"
-                                                placeholder="Ketik nama taman..."
+                                                placeholder="Type park name..."
                                                 className="pl-9"
                                                 value={parkQuery}
                                                 onChange={(e) =>
@@ -818,7 +838,7 @@ export default function OptimizePage() {
                                                                 +
                                                                 {visibleParks.length -
                                                                     10}{" "}
-                                                                taman lainnya
+                                                                more parks
                                                             </p>
                                                         )}
                                                     </div>
@@ -827,14 +847,14 @@ export default function OptimizePage() {
                                         {parkQuery.trim() &&
                                             visibleParks.length === 0 && (
                                                 <p className="text-sm text-muted-foreground py-2">
-                                                    Tidak ada taman yang cocok
+                                                    No matching parks
                                                 </p>
                                             )}
                                     </div>
 
                                     <div className="space-y-2">
                                         <Label htmlFor="max-vehicles">
-                                            Jumlah Mobil
+                                            Vehicle Count
                                         </Label>
                                         <Input
                                             id="max-vehicles"
@@ -851,6 +871,32 @@ export default function OptimizePage() {
                                             }
                                         />
                                     </div>
+
+                                    {/* Refill availability control (TASK 8) */}
+                                    <div className="space-y-2">
+                                        <Label>Refill Station Availability</Label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {([100, 50, 25] as RefillAvailability[]).map((pct) => (
+                                                <Button
+                                                    key={pct}
+                                                    type="button"
+                                                    variant={refillAvailability === pct ? "default" : "outline"}
+                                                    size="sm"
+                                                    onClick={() => setRefillAvailability(pct)}
+                                                >
+                                                    {pct}%
+                                                </Button>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {refillAvailability === 100
+                                                ? "All refill stations are available."
+                                                : refillAvailability === 50
+                                                ? "Half of the refill stations are available (deterministic subset)."
+                                                : "Only 25% of refill stations are available (deterministic subset)."}
+                                        </p>
+                                    </div>
+
                                     <Separator />
                                     <Button
                                         size="lg"
@@ -866,7 +912,7 @@ export default function OptimizePage() {
                                         ) : (
                                             <>
                                                 <Play className="mr-2" />
-                                                Run Optimize
+                                                Run Optimization
                                             </>
                                         )}
                                     </Button>
@@ -877,13 +923,13 @@ export default function OptimizePage() {
                                                 className="w-full"
                                             />
                                             <p className="text-sm text-muted-foreground">
-                                                Estimasi: 30s...
+                                                Estimated: ~10s (demo budget)
                                             </p>
                                         </div>
                                     )}
                                     {optimizeError && (
                                         <Alert variant="destructive">
-                                            <AlertTitle>Gagal</AlertTitle>
+                                            <AlertTitle>Failed</AlertTitle>
                                         </Alert>
                                     )}
                                 </CardContent>
@@ -895,7 +941,7 @@ export default function OptimizePage() {
                                     <CardHeader className="py-3 flex-row items-center justify-between flex-shrink-0">
                                         <CardTitle className="text-sm font-medium flex items-center gap-2">
                                             <TreeDeciduous className="h-4 w-4 text-primary" />
-                                            Taman Terpilih (
+                                            Selected Parks (
                                             {selectedParks.length})
                                         </CardTitle>
                                         {selectedParks.length > 0 && (
@@ -907,7 +953,7 @@ export default function OptimizePage() {
                                                     setSelected(new Set())
                                                 }
                                             >
-                                                Hapus Semua
+                                                Clear All
                                             </Button>
                                         )}
                                     </CardHeader>
@@ -970,7 +1016,7 @@ export default function OptimizePage() {
                                                 </ScrollArea>
                                                 <div className="mt-3 pt-3 border-t flex justify-between text-sm flex-shrink-0">
                                                     <span className="text-muted-foreground">
-                                                        Total Kebutuhan Air:
+                                                        Total Water Demand:
                                                     </span>
                                                     <span className="font-semibold text-primary">
                                                         {selectedParks
@@ -981,9 +1027,7 @@ export default function OptimizePage() {
                                                                         0),
                                                                 0,
                                                             )
-                                                            .toLocaleString(
-                                                                "id-ID",
-                                                            )}{" "}
+                                                            .toLocaleString("en-US")}{" "}
                                                         L
                                                     </span>
                                                 </div>
@@ -991,8 +1035,8 @@ export default function OptimizePage() {
                                         ) : (
                                             <div className="flex-1 flex items-center justify-center min-h-0">
                                                 <p className="text-sm text-muted-foreground text-center">
-                                                    Klik taman pada peta untuk
-                                                    memilih
+                                                    Click a park on the map to
+                                                    select it.
                                                 </p>
                                             </div>
                                         )}
@@ -1010,7 +1054,7 @@ export default function OptimizePage() {
                                         <Card>
                                             <CardHeader className="py-4 flex-row items-center justify-between gap-2">
                                                 <CardTitle className="text-base">
-                                                    Ringkasan Hasil
+                                                    Results Summary
                                                 </CardTitle>
                                                 <div className="flex items-center gap-2">
                                                     <Button
@@ -1036,23 +1080,47 @@ export default function OptimizePage() {
                                                         }
                                                     >
                                                         <Trash2 className="h-4 w-4 mr-1" />
-                                                        Bersihkan
+                                                        Clear
                                                     </Button>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent className="text-sm space-y-3">
+                                            <CardContent className="text-sm space-y-2">
                                                 <div className="flex justify-between p-3 bg-muted/50 rounded-md">
-                                                    <span>Total Waktu</span>
+                                                    <span>Makespan</span>
                                                     <b>
-                                                        {
-                                                            data.objective_time_min
-                                                        }{" "}
+                                                        {data.makespan?.toFixed(2) ?? data.objective_time_min}{" "}
                                                         min
                                                     </b>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span>Mobil Terpakai</span>
-                                                    <b>{data.vehicle_used}</b>
+                                                    <span>Total Routing Time</span>
+                                                    <b>{data.total_time?.toFixed(2) ?? "—"} min</b>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Route-Time Std Dev</span>
+                                                    <b>{data.route_time_std?.toFixed(2) ?? "—"} min</b>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Active Vehicles</span>
+                                                    <b>{data.active_vehicles ?? data.vehicle_used}</b>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Refill Visits</span>
+                                                    <b>{data.refill_visits ?? "—"}</b>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Feasible</span>
+                                                    <b className={data.feasible === false ? "text-destructive" : "text-green-600"}>
+                                                        {data.feasible === false ? "No" : "Yes"}
+                                                    </b>
+                                                </div>
+                                                <div className="flex justify-between text-xs text-muted-foreground pt-1">
+                                                    <span>Algorithm</span>
+                                                    <span>{data.algorithm ?? "alns_hybrid"}</span>
+                                                </div>
+                                                <div className="flex justify-between text-xs text-muted-foreground">
+                                                    <span>Compute Time</span>
+                                                    <span>{data.computation_time?.toFixed(2) ?? "—"} s</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -1068,93 +1136,12 @@ export default function OptimizePage() {
                                     <Alert className="bg-muted/50">
                                         <Loader2 className="animate-spin h-4 w-4" />
                                         <AlertTitle>
-                                            Memuat Rute Jalan...
+                                            Loading road routes...
                                         </AlertTitle>
                                     </Alert>
                                 </motion.div>
                             )}
-                        </TabsContent>
-                        {/* --- TAB 2: GROUPS --- */}
-                        <TabsContent
-    value="groups"
-    className="flex-1 flex flex-col gap-4 mt-4 min-h-0 data-[state=inactive]:hidden"
-  >
-    <Card className="flex-1 flex flex-col">
-      <CardHeader>
-        <CardTitle className="text-base">Grup Tersimpan</CardTitle>
-        <CardDescription>
-          Terapkan grup untuk memilih sekumpulan titik dengan cepat.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-3 flex-1 flex flex-col">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari group…"
-            value={groupQuery}
-            onChange={(e) => setGroupQuery(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-
-        {groupsQ.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground pt-4 justify-center">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading groups…
-          </div>
-        ) : groupsQ.isError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Gagal Memuat Grup</AlertTitle>
-          </Alert>
-        ) : (groupsQ.data ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center pt-4">
-            Belum ada group.
-          </p>
-        ) : (
-          <ScrollArea className="flex-1 rounded-md border">
-            <div className="p-2">
-              {filteredGroups.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center p-4">
-                  Grup tidak ditemukan.
-                </p>
-              )}
-              {filteredGroups.map((g) => (
-                <li
-                  key={g.id}
-                  className="list-none py-2 px-3 flex items-center justify-between gap-3 rounded-md hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{g.name}</div>
-                    <div className="text-xs text-muted-foreground flex gap-2">
-                      <span>{g.nodeIds?.length ?? 0} points</span>
-                      {g.description && (
-                        <>
-                          <span>·</span>
-                          <span className="truncate opacity-80">
-                            {g.description}
-                          </span>
-                        </>
-                      )}
                     </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => applyGroup(g)}
-                  >
-                    Terapkan
-                  </Button>
-                </li>
-              ))}
-            </div>
-          </ScrollArea>
-        )}
-      </CardContent>
-    </Card>
-  </TabsContent>
-                    </Tabs>
                 </div>
             </div>
 
@@ -1170,7 +1157,7 @@ export default function OptimizePage() {
                             <CardHeader className="pb-4 border-b">
                                 <CardTitle className="text-lg flex items-center gap-3">
                                     <ListTree className="h-5 w-5 text-primary" />
-                                    Detail Rute
+                                    Route Details
                                 </CardTitle>
                             </CardHeader>
                             <div className="max-w-full overflow-x-auto">
@@ -1178,19 +1165,19 @@ export default function OptimizePage() {
                                     <TableHeader>
                                         <TableRow className="bg-gradient-to-r from-primary/10 to-primary/5 hover:bg-gradient-to-r hover:from-primary/15 hover:to-primary/10 border-b-2 border-primary/20">
                                             <TableHead className="w-[80px] font-semibold text-primary">
-                                                Mobil
+                                                Vehicle
                                             </TableHead>
                                             <TableHead className="w-[190px] font-semibold text-primary">
-                                                Total Waktu
+                                                Total Time
                                             </TableHead>
                                             <TableHead className="font-semibold text-primary">
-                                                Urutan (Sequence)
+                                                Sequence
                                             </TableHead>
                                             <TableHead className="w-[260px] font-semibold text-primary">
-                                                Ringkasan Rute
+                                                Route Summary
                                             </TableHead>
                                             <TableHead className="w-[100px] text-right font-semibold text-primary">
-                                                Aksi
+                                                Action
                                             </TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -1361,22 +1348,19 @@ export default function OptimizePage() {
                                                                     <span className="inline-flex items-center rounded-full border px-2 py-[2px] text-[11px]">
                                                                         🏁{" "}
                                                                         {stops}{" "}
-                                                                        titik
+                                                                        stops
                                                                     </span>
                                                                     <span className="inline-flex items-center rounded-full border px-2 py-[2px] text-[11px]">
                                                                         💧{" "}
-                                                                        {totalDemand.toLocaleString(
-                                                                            "id-ID",
-                                                                        )}{" "}
-                                                                        L
-                                                                        disiram
+                                                                        {totalDemand.toLocaleString("en-US")}{" "}
+                                                                        L watered
                                                                     </span>
                                                                     <span className="inline-flex items-center rounded-full border px-2 py-[2px] text-[11px]">
                                                                         ♻️{" "}
                                                                         {
                                                                             refillCount
                                                                         }{" "}
-                                                                        refill
+                                                                        refills
                                                                     </span>
                                                                     {/* Optional: kalau mau tampilkan juga maksimum muatan yang pernah dibawa */}
                                                                     {/*
@@ -1421,8 +1405,8 @@ export default function OptimizePage() {
                                                                 <TooltipContent>
                                                                     <p>
                                                                         {isHighlighted
-                                                                            ? "Matikan Highlight"
-                                                                            : "Lihat Rute"}
+                                                                            ? "Turn off highlight"
+                                                                            : "Show route"}
                                                                     </p>
                                                                 </TooltipContent>
                                                             </Tooltip>

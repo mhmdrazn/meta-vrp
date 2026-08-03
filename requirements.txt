@@ -1,26 +1,27 @@
-# Dependencies produksi untuk deployment backend FastAPI di Vercel
-# (Root Directory project Vercel = root repo ini, function: backend/api/index.py)
-# Versi disinkronkan dengan backend/requirements.txt (tanpa tool dev: black/ruff).
+# Production dependencies for the public Vercel demo deployment (DEMO_MODE=1).
+# Function entry: api/index.py — mounts backend.app (see vercel.json).
+# NO SQLAlchemy / psycopg2 / python-dotenv here: TASK 3 removed the DB from the demo
+# reachable import graph, and settings.DEMO_MODE gates the operational routers behind
+# a deferred import so backend.database is never touched.
+#
+# If you need the operational stack locally (DEMO_MODE=0), use backend/requirements.txt
+# instead (dev environment — includes SQLAlchemy/psycopg2/black/ruff).
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.11.0
 fastapi==0.122.0
-greenlet==3.2.4
 h11==0.16.0
 idna==3.11
 numpy==2.2.0
 packaging==25.0
 pandas==2.3.3
-psycopg2-binary==2.9.11
 pydantic==2.12.4
 pydantic-settings==2.12.0
 pydantic_core==2.41.5
 python-dateutil==2.9.0.post0
-python-dotenv==1.2.1
 pytz==2025.2
 six==1.17.0
 sniffio==1.3.1
-SQLAlchemy==2.0.44
 starlette==0.50.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0

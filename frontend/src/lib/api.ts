@@ -3,9 +3,18 @@ import type { Operator, Vehicle } from '../types'
 import type { LogsPage } from '../types'
 import type { HistoryItem } from '../types'
 import type { JobDetail, JobVehicle, JobRoute, JobRouteStep } from '../types'
-import type { OptimizeResponse, LogEntry, Group, Assignment, RouteStatus, Node } from '../types'
-import { LOCAL_NODES } from '../data/nodes.data'
+import type { OptimizeResponse, LogEntry, Group, Assignment, RouteStatus, Node, Dataset } from '../types'
 import type { Geometry } from 'geojson'
+
+export interface OptimizePayload {
+  selected_node_ids: string[]
+  num_vehicles: number
+  dataset_id?: string
+  algorithm?: 'aco' | 'alns_standard' | 'alns_hybrid'
+  refill_ids_override?: string[] | null
+  seed?: number | null
+  time_limit_sec?: number | null
+}
 
 const OSRM_BASE_URL = 'https://router.project-osrm.org'
 
@@ -31,10 +40,11 @@ export async function postJSON<T>(url: string, body?: any): Promise<T> {
 }
 
 export const Api = {
-  // ... (semua fungsi Anda yang lain seperti optimize, listGroups, dll...)
-  // ... (optimize, listLogs, listGroups, createGroup, updateGroup, deleteGroup) ...
+  // Optimize: strongly-typed payload (TASK 8) — dataset_id, algorithm, refill override.
+  optimize: (payload: OptimizePayload) => postJSON<OptimizeResponse>('/optimize', payload),
 
-  optimize: (payload: any) => postJSON<OptimizeResponse>('/optimize', payload),
+  // Dataset discovery — powers the Dataset A/B selector in OptimizePage.
+  listDatasets: () => getJSON<Dataset[]>('/datasets'),
   listLogs: () => getJSON<LogEntry[]>('/logs'),
   listGroups: async (): Promise<Group[]> => {
     const raw = await getJSON<any[]>('/groups')
@@ -65,11 +75,18 @@ export const Api = {
   },
   deleteGroup: (id: string) => api.delete(`/groups/${id}`).then(() => true),
 
-  // Fungsi listNodes (dari sebelumnya, sudah benar)
-  listNodes: async (): Promise<Node[]> => {
-    console.log("✅ [API INTERCEPT] Mengembalikan data dari 'nodes.data.ts' (bukan backend)")
-    await new Promise((res) => setTimeout(res, 50))
-    return LOCAL_NODES
+  // Fetch nodes for a specific dataset from the backend (TASK 8). Retires the previous
+  // hardcoded LOCAL_NODES interception — src/data/nodes.data.ts is now dead code.
+  listNodes: async (datasetId: string = 'dataset_a'): Promise<Node[]> => {
+    const raw = await getJSON<any[]>('/nodes', { dataset_id: datasetId })
+    return (raw ?? []).map((n) => ({
+      id: String(n.id),
+      name: n.name ?? undefined,
+      lat: Number(n.lat),
+      lon: Number(n.lon),
+      kind: n.kind ?? undefined,
+      demand: n.demand_liters ?? n.demand ?? undefined,
+    }))
   },
 
   // ==========================================================

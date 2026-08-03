@@ -1,0 +1,7 @@
+# Minimal deps needed to run the experiment notebooks standalone (outside the full
+# meta-vrp repo). See experiments/README.md for what to copy alongside this file.
+# Deliberately excludes fastapi/uvicorn/sqlalchemy/psycopg2 — the engine layer has
+# zero coupling to any of those.
+numpy>=2.0
+pandas>=2.0
+jupyter>=1.0

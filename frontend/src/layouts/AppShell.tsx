@@ -25,14 +25,20 @@ import {
 
 import { useUI } from "../stores/ui";
 
-const navLinks = [
-    { to: "/", label: "Optimasi", icon: Map },
-    { to: "/groups", label: "Manajemen Grup", icon: ClipboardList },
-    { to: "/assign", label: "Penugasan", icon: Users },
-    { to: "/status", label: "Status Lapangan", icon: Activity },
-    { to: "/logs", label: "Histori", icon: History },
-    { to: "/editor", label: "Editor Peta", icon: Leaf },
+// In demo mode (default public deployment) we only surface routes that don't depend on
+// the database. The other pages (Groups/Assign/Status/Logs/Editor) are still present in
+// the router for operational-mode use, but hidden from the demo nav.
+const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? "1") === "1";
+
+const ALL_NAV_LINKS = [
+    { to: "/", label: "Optimize", icon: Map, demo: true },
+    { to: "/groups", label: "Group Management", icon: ClipboardList, demo: false },
+    { to: "/assign", label: "Assignment", icon: Users, demo: false },
+    { to: "/status", label: "Field Status", icon: Activity, demo: false },
+    { to: "/logs", label: "History", icon: History, demo: false },
+    { to: "/editor", label: "Map Editor", icon: Leaf, demo: false },
 ];
+const navLinks = DEMO_MODE ? ALL_NAV_LINKS.filter((l) => l.demo) : ALL_NAV_LINKS;
 
 function AppLogo({ className }: { className?: string }) {
     return (
@@ -47,7 +53,7 @@ function AppLogo({ className }: { className?: string }) {
             <div className="flex items-center justify-center w-8 h-8 bg-green-600 rounded-lg text-white">
                 <Leaf className="w-5 h-5" />
             </div>
-            <span>Armada Hijau</span>
+            <span>Green Fleet</span>
         </NavLink>
     );
 }
@@ -187,7 +193,7 @@ function AppNav({ isCollapsed }: { isCollapsed: boolean }) {
                                         }}
                                         className="whitespace-nowrap ml-3"
                                     >
-                                        Ciutkan
+                                        Collapse
                                     </motion.span>
                                 )}
                             </AnimatePresence>
@@ -195,7 +201,7 @@ function AppNav({ isCollapsed }: { isCollapsed: boolean }) {
                     </TooltipTrigger>
                     {isCollapsed && (
                         <TooltipContent side="right">
-                            <p>Perluas sidebar</p>
+                            <p>Expand sidebar</p>
                         </TooltipContent>
                     )}
                 </Tooltip>
@@ -222,7 +228,7 @@ export default function AppShell() {
                                     className="md:hidden"
                                 >
                                     <Menu className="h-5 w-5" />
-                                    <span className="sr-only">Buka menu</span>
+                                    <span className="sr-only">Open menu</span>
                                 </Button>
                             </SheetTrigger>
                             <SheetContent
@@ -251,24 +257,32 @@ export default function AppShell() {
                 </div>
             </header>
 
+            {/* Demo mode: sidebar hidden (only Optimize page shipped). Operational mode
+                still exposes it via the mobile Sheet in the header. */}
             <div
                 className={cn(
-                    "container mx-auto flex-1 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4 px-4 py-4 overflow-hidden",
-                    "transition-[grid-template-columns] duration-300 ease-in-out",
-                    isSidebarCollapsed && "md:grid-cols-[72px_1fr]",
+                    "container mx-auto flex-1 grid gap-4 px-4 py-4 overflow-hidden",
+                    DEMO_MODE
+                        ? "grid-cols-1"
+                        : cn(
+                              "grid-cols-1 md:grid-cols-[220px_1fr]",
+                              "transition-[grid-template-columns] duration-300 ease-in-out",
+                              isSidebarCollapsed && "md:grid-cols-[72px_1fr]",
+                          ),
                 )}
             >
-                {/* hilangin scroll horizontal di sidebar desktop */}
-                <aside
-                    className={cn(
-                        "hidden md:block h-full overflow-y-auto overflow-x-hidden app-scroll",
-                        "bg-background/80 backdrop-blur",
-                    )}
-                >
-                    <div className="sticky top-16">
-                        <AppNav isCollapsed={isSidebarCollapsed} />
-                    </div>
-                </aside>
+                {!DEMO_MODE && (
+                    <aside
+                        className={cn(
+                            "hidden md:block h-full overflow-y-auto overflow-x-hidden app-scroll",
+                            "bg-background/80 backdrop-blur",
+                        )}
+                    >
+                        <div className="sticky top-16">
+                            <AppNav isCollapsed={isSidebarCollapsed} />
+                        </div>
+                    </aside>
+                )}
 
                 <main className="h-full overflow-y-auto rounded-2xl border bg-gradient-to-br from-card via-card to-primary/[0.02] app-scroll shadow-sm">
                     <div className="p-5 md:p-8">
@@ -280,8 +294,8 @@ export default function AppShell() {
             <footer className="flex-shrink-0 border-t border-primary/10 bg-gradient-to-r from-transparent via-primary/[0.02] to-transparent">
                 <div className="container mx-auto flex h-12 items-center justify-center px-4">
                     <p className="text-xs text-muted-foreground">
-                        © {new Date().getFullYear()} MetaVRP Project • Dibuat
-                        untuk Proyek Capstone
+                        © {new Date().getFullYear()} MetaVRP Project • Park-Watering
+                        Routing Decision-Support System
                     </p>
                 </div>
             </footer>

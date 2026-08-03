@@ -1,0 +1,709 @@
+{
+  "meta": {
+    "dataset_id": "dataset_b",
+    "generated_from_nodes": "data/dataset_b.csv",
+    "generated_from_matrix": "data/time_matrix_b.csv",
+    "generated_at": "2026-08-03T04:34:50.544207+00:00",
+    "node_count": 77,
+    "nodes_csv_sha256_prefix": "1fe0402b69010788",
+    "matrix_csv_sha256_prefix": "4cc46ddbba9c4f1e",
+    "refill_service_min": 12.0,
+    "time_unit": "minutes",
+    "volume_unit": "liters"
+  },
+  "nodes": [
+    {
+      "id": "0",
+      "name": "DEPOT_DKRTH_Rayon_Pusat",
+      "lat": -7.264214523,
+      "lon": 112.7532145,
+      "type": "depot",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "1",
+      "name": "JL. WIJAYA KUSUMA JALUR TENGAH",
+      "lat": -7.257029,
+      "lon": 112.748943,
+      "type": "park",
+      "demand_liters": 7425.0,
+      "service_min": 29.7
+    },
+    {
+      "id": "2",
+      "name": "JL. WIJAYA KUSUMAPEDESTRIAN 1",
+      "lat": -7.259244,
+      "lon": 112.748821,
+      "type": "park",
+      "demand_liters": 1181.25,
+      "service_min": 4.725
+    },
+    {
+      "id": "3",
+      "name": "JL. WIJAYA KUSUMAPEDESTRIAN 2",
+      "lat": -7.257029,
+      "lon": 112.748943,
+      "type": "park",
+      "demand_liters": 896.25,
+      "service_min": 3.585
+    },
+    {
+      "id": "4",
+      "name": "JL. WIJAYA KUSUMAPEDESTRIAN 3",
+      "lat": -7.257121,
+      "lon": 112.749081,
+      "type": "park",
+      "demand_liters": 873.75,
+      "service_min": 3.495
+    },
+    {
+      "id": "5",
+      "name": "JL. WIJAYA KUSUMAPEDESTRIAN 4",
+      "lat": -7.259357,
+      "lon": 112.749017,
+      "type": "park",
+      "demand_liters": 1158.75,
+      "service_min": 4.635
+    },
+    {
+      "id": "6",
+      "name": "JL.. BKR PELAJAR",
+      "lat": -7.258047,
+      "lon": 112.750869,
+      "type": "park",
+      "demand_liters": 1286.25,
+      "service_min": 5.145
+    },
+    {
+      "id": "7",
+      "name": "JL. WALIKOTA MUSTAJAB PEDESTRIAN",
+      "lat": -7.260743,
+      "lon": 112.747025,
+      "type": "park",
+      "demand_liters": 5190.0,
+      "service_min": 20.76
+    },
+    {
+      "id": "8",
+      "name": "JL. AMBENGAN PEDESTRIAN SISI SMA KOMPLEK",
+      "lat": -7.25602778,
+      "lon": 112.7495833,
+      "type": "park",
+      "demand_liters": 573.75,
+      "service_min": 2.295
+    },
+    {
+      "id": "9",
+      "name": "JL. AMBENGAN JALUR TENGAH SISI BARAT",
+      "lat": -7.25613889,
+      "lon": 112.7533056,
+      "type": "park",
+      "demand_liters": 12082.5,
+      "service_min": 48.33
+    },
+    {
+      "id": "10",
+      "name": "JL. NGEMPLAK DEPAN GARNISUN RETONDE",
+      "lat": -7.2595,
+      "lon": 112.7433889,
+      "type": "park",
+      "demand_liters": 5793.75,
+      "service_min": 23.175
+    },
+    {
+      "id": "11",
+      "name": "RETONDE JL. SLAMET",
+      "lat": -7.26169444,
+      "lon": 112.7493889,
+      "type": "park",
+      "demand_liters": 832.5,
+      "service_min": 3.33
+    },
+    {
+      "id": "12",
+      "name": "RETONDE SONO KEMBANG",
+      "lat": -7.27188889,
+      "lon": 112.7429444,
+      "type": "park",
+      "demand_liters": 615.0,
+      "service_min": 2.46
+    },
+    {
+      "id": "13",
+      "name": "RETONDE POJOK KAYOON SISI SELATAN",
+      "lat": -7.26605556,
+      "lon": 112.7497528,
+      "type": "park",
+      "demand_liters": 1005.0,
+      "service_min": 4.02
+    },
+    {
+      "id": "14",
+      "name": "JL. KARIMUN JAWA JALUR TENGAH",
+      "lat": -7.273,
+      "lon": 112.7453611,
+      "type": "park",
+      "demand_liters": 21390.0,
+      "service_min": 85.56
+    },
+    {
+      "id": "15",
+      "name": "JL. SULAWESI DEPAN TAMAN PERSAHABATAN RETONDE",
+      "lat": -7.27636111,
+      "lon": 112.7461667,
+      "type": "park",
+      "demand_liters": 1237.5,
+      "service_min": 4.95
+    },
+    {
+      "id": "16",
+      "name": "JL. IRIAN BARAT PANJAT TEBING",
+      "lat": -7.274755,
+      "lon": 112.744028,
+      "type": "park",
+      "demand_liters": 11160.0,
+      "service_min": 44.64
+    },
+    {
+      "id": "17",
+      "name": "JL. KARIMUN JAWA STREN KALI SISI RUMAH POMPA",
+      "lat": -7.27325,
+      "lon": 112.7459722,
+      "type": "park",
+      "demand_liters": 21390.0,
+      "service_min": 85.56
+    },
+    {
+      "id": "18",
+      "name": "JL. URIP SUMOHARJO PEDESTRIAMN SISI BARAT",
+      "lat": -7.27491667,
+      "lon": 112.7417222,
+      "type": "park",
+      "demand_liters": 1867.5,
+      "service_min": 7.47
+    },
+    {
+      "id": "19",
+      "name": "JL. BASUKI RAHMAT PEDESTRIAN SISI BARAT",
+      "lat": -7.263208,
+      "lon": 112.740842,
+      "type": "park",
+      "demand_liters": 2940.0,
+      "service_min": 11.76
+    },
+    {
+      "id": "20",
+      "name": "RETONDE TEGALSARI BELAKANG POLSEK",
+      "lat": -7.26586111,
+      "lon": 112.7400667,
+      "type": "park",
+      "demand_liters": 750.0,
+      "service_min": 3.0
+    },
+    {
+      "id": "21",
+      "name": "RETONDE TEGALSARI BELAKANG POLSEK",
+      "lat": -7.26591111,
+      "lon": 112.7401917,
+      "type": "park",
+      "demand_liters": 862.5,
+      "service_min": 3.45
+    },
+    {
+      "id": "22",
+      "name": "RETONDE TEGALSARI BELAKANG POLSEK",
+      "lat": -7.26605833,
+      "lon": 112.7401833,
+      "type": "park",
+      "demand_liters": 795.0,
+      "service_min": 3.18
+    },
+    {
+      "id": "23",
+      "name": "TEGALSARI TAMAN KARTIKA",
+      "lat": -7.26686111,
+      "lon": 112.7364444,
+      "type": "park",
+      "demand_liters": 23760.0,
+      "service_min": 95.04
+    },
+    {
+      "id": "24",
+      "name": "JL. SULUNG KALI",
+      "lat": -7.243868,
+      "lon": 112.741211,
+      "type": "park",
+      "demand_liters": 6435.0,
+      "service_min": 25.74
+    },
+    {
+      "id": "25",
+      "name": "JL. TEMBAAN PEDESTRIAN",
+      "lat": -7.246653,
+      "lon": 112.735439,
+      "type": "park",
+      "demand_liters": 4695.0,
+      "service_min": 18.78
+    },
+    {
+      "id": "26",
+      "name": "JL.KEBUN ROJO",
+      "lat": -7.243195,
+      "lon": 112.738258,
+      "type": "park",
+      "demand_liters": 7680.0,
+      "service_min": 30.72
+    },
+    {
+      "id": "27",
+      "name": "JL. GEMBLONGAN KANAN",
+      "lat": -7.253857,
+      "lon": 112.736866,
+      "type": "park",
+      "demand_liters": 5010.0,
+      "service_min": 20.04
+    },
+    {
+      "id": "28",
+      "name": "JL. GEMBLONGAN KIRI",
+      "lat": -7.253857,
+      "lon": 112.736866,
+      "type": "park",
+      "demand_liters": 5010.0,
+      "service_min": 20.04
+    },
+    {
+      "id": "29",
+      "name": "JL. BUBUTAN",
+      "lat": -7.24972222,
+      "lon": 112.736,
+      "type": "park",
+      "demand_liters": 25305.0,
+      "service_min": 101.22
+    },
+    {
+      "id": "30",
+      "name": "JL. PAWIYATAN",
+      "lat": -7.25175,
+      "lon": 112.7314167,
+      "type": "park",
+      "demand_liters": 3412.5,
+      "service_min": 13.65
+    },
+    {
+      "id": "31",
+      "name": "JL. GENTENG KALI JALUR TENGAH",
+      "lat": -7.256027,
+      "lon": 112.739915,
+      "type": "park",
+      "demand_liters": 5910.0,
+      "service_min": 23.64
+    },
+    {
+      "id": "32",
+      "name": "RETONDE GENTENG KALI DEPAN PERHUTYANI",
+      "lat": -7.25613889,
+      "lon": 112.7426583,
+      "type": "park",
+      "demand_liters": 5190.0,
+      "service_min": 20.76
+    },
+    {
+      "id": "33",
+      "name": "PEDESTRIAN GENTENG KALI",
+      "lat": -7.25605556,
+      "lon": 112.7403611,
+      "type": "park",
+      "demand_liters": 5910.0,
+      "service_min": 23.64
+    },
+    {
+      "id": "34",
+      "name": "PEDESTRIAN TUNJUNGAN",
+      "lat": -7.25811111,
+      "lon": 112.7381667,
+      "type": "park",
+      "demand_liters": 4657.5,
+      "service_min": 18.63
+    },
+    {
+      "id": "35",
+      "name": "RETONDE EMBONG MALANG DEPAN SAEKO",
+      "lat": -7.26112,
+      "lon": 112.739835,
+      "type": "park",
+      "demand_liters": 3487.5,
+      "service_min": 13.95
+    },
+    {
+      "id": "36",
+      "name": "RETONDE EMBONG MALANG POS POLISI",
+      "lat": -7.258563,
+      "lon": 112.733211,
+      "type": "park",
+      "demand_liters": 360.0,
+      "service_min": 1.44
+    },
+    {
+      "id": "37",
+      "name": "RETONDE POS POLISI JL. PRABAN",
+      "lat": -7.255864,
+      "lon": 112.734437,
+      "type": "park",
+      "demand_liters": 3510.0,
+      "service_min": 14.04
+    },
+    {
+      "id": "38",
+      "name": "PEDESTRIAN SIMPANG DUKUH",
+      "lat": -7.26133333,
+      "lon": 112.7418333,
+      "type": "park",
+      "demand_liters": 1537.5,
+      "service_min": 6.15
+    },
+    {
+      "id": "39",
+      "name": "RETONDE SIMPANG DUKUH",
+      "lat": -7.26297778,
+      "lon": 112.7421111,
+      "type": "park",
+      "demand_liters": 510.0,
+      "service_min": 2.04
+    },
+    {
+      "id": "40",
+      "name": "PEDESTRIAN GUBERNUR SURYO KANAN-KIRI",
+      "lat": -7.263382,
+      "lon": 112.742796,
+      "type": "park",
+      "demand_liters": 3712.5,
+      "service_min": 14.85
+    },
+    {
+      "id": "41",
+      "name": "JL. PROF.DR. MOESTOPO JALUR TENGAH",
+      "lat": -7.26577778,
+      "lon": 112.7583056,
+      "type": "park",
+      "demand_liters": 1320.0,
+      "service_min": 5.28
+    },
+    {
+      "id": "42",
+      "name": "JL. PROF. DR. MOESTOPO PEDESTRIAN",
+      "lat": -7.26591667,
+      "lon": 112.7584722,
+      "type": "park",
+      "demand_liters": 2497.5,
+      "service_min": 9.99
+    },
+    {
+      "id": "43",
+      "name": "JL. PANGLIMA SUDIRMAN PEDESTRIAN SISI BARAT",
+      "lat": -7.26875,
+      "lon": 112.7440833,
+      "type": "park",
+      "demand_liters": 3780.975,
+      "service_min": 15.1239
+    },
+    {
+      "id": "44",
+      "name": "RETONDE KARTINI 1",
+      "lat": -7.27815,
+      "lon": 112.72947,
+      "type": "park",
+      "demand_liters": 3915.0,
+      "service_min": 15.66
+    },
+    {
+      "id": "45",
+      "name": "RETONDE KARTINI 2",
+      "lat": -7.278349,
+      "lon": 112.731251,
+      "type": "park",
+      "demand_liters": 97.5,
+      "service_min": 0.39
+    },
+    {
+      "id": "46",
+      "name": "JL. INDARA GIRI",
+      "lat": -7.28775,
+      "lon": 112.7315,
+      "type": "park",
+      "demand_liters": 2655.0,
+      "service_min": 10.62
+    },
+    {
+      "id": "47",
+      "name": "RETONDE IMAM BONJOL",
+      "lat": -7.279915,
+      "lon": 112.735052,
+      "type": "park",
+      "demand_liters": 472.5,
+      "service_min": 1.89
+    },
+    {
+      "id": "48",
+      "name": "JL. KOMBES POL M. DURYAT",
+      "lat": -7.26866667,
+      "lon": 112.7397222,
+      "type": "park",
+      "demand_liters": 26595.0,
+      "service_min": 106.38
+    },
+    {
+      "id": "49",
+      "name": "JL. BENGAWAN PEDESTRIAN SISI TIMUR",
+      "lat": -7.29005556,
+      "lon": 112.7400833,
+      "type": "park",
+      "demand_liters": 1470.0,
+      "service_min": 5.88
+    },
+    {
+      "id": "50",
+      "name": "RETONDE MOJOPAHIT",
+      "lat": -7.28070833,
+      "lon": 112.7446167,
+      "type": "park",
+      "demand_liters": 2340.0,
+      "service_min": 9.36
+    },
+    {
+      "id": "51",
+      "name": "PEDESTRIAN SRIWIJAYA",
+      "lat": -7.27930556,
+      "lon": 112.7421667,
+      "type": "park",
+      "demand_liters": 1770.0,
+      "service_min": 7.08
+    },
+    {
+      "id": "52",
+      "name": "REFILL KALI MAS",
+      "lat": -7.26238889,
+      "lon": 112.7456944,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "53",
+      "name": "REFILL DEKET MIE BANGLADESH",
+      "lat": -7.25797222,
+      "lon": 112.7442222,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "54",
+      "name": "REFILL UNDAAN",
+      "lat": -7.25505556,
+      "lon": 112.7436944,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "55",
+      "name": "REFILL KALI MAS",
+      "lat": -7.26244444,
+      "lon": 112.7455556,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "56",
+      "name": "REFILL KALI KAYOON",
+      "lat": -7.27241667,
+      "lon": 112.74475,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "57",
+      "name": "REFILL IRIAN BARAT",
+      "lat": -7.27705556,
+      "lon": 112.7441111,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "58",
+      "name": "REFILL KEPUTRAN",
+      "lat": -7.27525,
+      "lon": 112.7435,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "59",
+      "name": "REFILL KALI KAYOON",
+      "lat": -7.26830556,
+      "lon": 112.7489722,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "60",
+      "name": "REFIL EMBONG KALIASIN",
+      "lat": -7.26280556,
+      "lon": 112.7442778,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "61",
+      "name": "REFILL KEDUNGDORO",
+      "lat": -7.26291667,
+      "lon": 112.7311389,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "62",
+      "name": "REFILL KALI SULUNG",
+      "lat": -7.2435,
+      "lon": 112.7404444,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "63",
+      "name": "REFILL KALI SULUNG",
+      "lat": -7.24744444,
+      "lon": 112.7420556,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "64",
+      "name": "REFILL KALI BIBIS TAMA 1",
+      "lat": -7.243,
+      "lon": 112.7391944,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "65",
+      "name": "REFILL ALUN ALUN CONTONG",
+      "lat": -7.25358333,
+      "lon": 112.7374444,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "66",
+      "name": "REFILL GENTENG KALI",
+      "lat": -7.256,
+      "lon": 112.7402222,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "67",
+      "name": "REFILL GENTENG KALI",
+      "lat": -7.25597222,
+      "lon": 112.7427778,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "68",
+      "name": "REFILL KETABANG KALI",
+      "lat": -7.26236111,
+      "lon": 112.7449722,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "69",
+      "name": "REFILL PACAR KEMBANG",
+      "lat": -7.26425,
+      "lon": 112.7569722,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "70",
+      "name": "REFILL UNDAAN KULON",
+      "lat": -7.25486111,
+      "lon": 112.7435278,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "71",
+      "name": "REFILL KEPUTRAN",
+      "lat": -7.27777778,
+      "lon": 112.7441389,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "72",
+      "name": "REFILL DARMO KALI",
+      "lat": -7.29575,
+      "lon": 112.7418611,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "73",
+      "name": "REFILL OPAK",
+      "lat": -7.29016667,
+      "lon": 112.7349444,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "74",
+      "name": "REFILL SULAWESI",
+      "lat": -7.27719444,
+      "lon": 112.7439722,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "75",
+      "name": "REFILL DARMO KALI",
+      "lat": -7.29022222,
+      "lon": 112.7426667,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    },
+    {
+      "id": "76",
+      "name": "REFILL DARMO REJO",
+      "lat": -7.29527778,
+      "lon": 112.7418889,
+      "type": "refill",
+      "demand_liters": 0.0,
+      "service_min": 0.0
+    }
+  ]
+}

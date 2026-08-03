@@ -14,7 +14,27 @@ export interface OptimizeResponse {
   vehicle_used: number
   routes: OptimizeRoute[]
   diagnostics?: Record<string, unknown>
+  // New unified metrics (TASK 1) — all present in backend response, safe to expect.
+  total_time?: number
+  makespan?: number
+  route_time_std?: number
+  active_vehicles?: number
+  refill_visits?: number
+  computation_time?: number
+  feasible?: boolean
+  algorithm?: string
+  job_id?: string | null
 }
+
+export interface Dataset {
+  id: string
+  label: string
+  node_count: number
+  park_count: number
+  refill_count: number
+}
+
+export type RefillAvailability = 100 | 50 | 25
 
 export type RouteStatus = 'pending' | 'in_progress' | 'done' | 'issue'
 

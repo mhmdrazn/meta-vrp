@@ -8,14 +8,28 @@ _BACKEND_DIR = Path(__file__).resolve().parent
 _DEFAULT_DATA_DIR = _BACKEND_DIR / "data"
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class Settings:
-    # === data paths ===
+    # === deployment mode ===
+    # DEMO_MODE=1 (default) -> stateless public demo, no database calls at all.
+    # DEMO_MODE=0           -> full operational stack (Supabase catalogs/history/status).
+    DEMO_MODE: bool = _env_bool("DEMO_MODE", True)
+
+    # === data paths (legacy CSV — still used when a caller loads via load_nodes_csv;
+    #                 dataset_a/dataset_b JSON+NPY loaded via engine.io_utils are the
+    #                 preferred path for the public demo, see TASK 2) ===
     DATA_NODES_PATH: str = os.getenv(
-        "DATA_NODES_PATH", str(_DEFAULT_DATA_DIR / "nodes.csv")
+        "DATA_NODES_PATH", str(_DEFAULT_DATA_DIR / "dataset_a.csv")
     )
     DATA_MATRIX_PATH: str = os.getenv(
-        "DATA_MATRIX_PATH", str(_DEFAULT_DATA_DIR / "time_matrix.csv")
+        "DATA_MATRIX_PATH", str(_DEFAULT_DATA_DIR / "time_matrix_a.csv")
     )
 
     # === fixed operational params ===

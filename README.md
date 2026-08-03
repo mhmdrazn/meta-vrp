@@ -414,8 +414,8 @@ meta-vrp/
 │   ├── migrations/         # Database migrations
 │   │   └── schema_additions.sql
 │   ├── data/               # Dataset CSV
-│   │   ├── nodes.csv       # Park locations & demands
-│   │   └── time_matrix.csv # OSRM distance matrix
+│   │   ├── dataset_a.csv   # Dataset A Park locations & demands
+│   │   └── time_matrix_a.csv # OSRM distance matrix
 │   ├── app.py              # FastAPI application entry
 │   ├── requirements.txt    # Python dependencies
 │   └── .env                # Backend environment variables

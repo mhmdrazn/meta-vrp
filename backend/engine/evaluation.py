@@ -50,6 +50,37 @@ def makespan_minutes(routes, nodes, tm):
     return max(per_route) if per_route else 0.0
 
 
+def route_time_std(
+    routes: List[List[str]], nodes: Dict[str, Node], tm: TimeMatrix
+) -> float:
+    """Population standard deviation of active-route durations (minutes)."""
+    durations = [route_time_minutes(r, nodes, tm) for r in routes if len(r) > 2]
+    if not durations:
+        return 0.0
+    mean = sum(durations) / len(durations)
+    variance = sum((d - mean) ** 2 for d in durations) / len(durations)
+    return variance ** 0.5
+
+
+def count_refill_visits(
+    routes: List[List[str]], nodes: Dict[str, Node]
+) -> int:
+    """Total number of refill-station visits across all active routes."""
+    n = 0
+    for r in routes:
+        if len(r) <= 2:
+            continue
+        for nid in r[1:-1]:
+            if nodes[nid].type == "refill":
+                n += 1
+    return n
+
+
+def count_active_vehicles(routes: List[List[str]]) -> int:
+    """Number of vehicles that actually visit at least one non-depot node."""
+    return sum(1 for r in routes if len(r) > 2)
+
+
 def capacity_trace_and_violations(route, nodes, vehicle_capacity):
     """
     Kembalikan:
