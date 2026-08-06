@@ -1,0 +1,7 @@
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+experiments/
+notebooks/
+.git/
+.vscode/
