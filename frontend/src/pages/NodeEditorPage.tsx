@@ -115,7 +115,7 @@ export default function NodeEditorPage() {
               disabled={isLoadingNodes}
             >
               <SelectTrigger>
-                <SelectValue placeholder='— Pilih taman yang akan digambar —' />
+                <SelectValue placeholder='Pilih taman yang akan digambar' />
               </SelectTrigger>
               {/* 2. Tambahkan z-index tinggi agar dropdown di atas peta */}
               <SelectContent className='z-[1000]'>

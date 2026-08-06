@@ -551,7 +551,7 @@ export default function LogsPage() {
                           (it as any).served_points ??
                           (it as any).points_total ??
                           (it as any).node_count ??
-                          '—'
+                          '-'
 
                         const delay = idx * 0.03 // stagger ringan
 
@@ -896,7 +896,7 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
                                   animate={{ opacity: 1 }}
                                   transition={{ duration: 0.18, delay: delay + 0.01 }}
                                 >
-                                  {assignedVeh?.plate ?? '—'}
+                                  {assignedVeh?.plate ?? '-'}
                                 </motion.div>
                               </TableCell>
 
@@ -907,7 +907,7 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
                                   animate={{ opacity: 1 }}
                                   transition={{ duration: 0.18, delay: delay + 0.02 }}
                                 >
-                                  {assignedOp?.name ?? '—'}
+                                  {assignedOp?.name ?? '-'}
                                 </motion.div>
                               </TableCell>
 
@@ -933,7 +933,7 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
                                     ? `${(v as any).route_total_time_min} min (${minutesToHHMM(
                                         (v as any).route_total_time_min,
                                       )})`
-                                    : '—'}
+                                    : '-'}
                                 </motion.div>
                               </TableCell>
                             </TableRow>
@@ -1079,7 +1079,7 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
                                                 delay: delay + 0.03,
                                               }}
                                             >
-                                              {s.reason ?? '—'}
+                                              {s.reason ?? '-'}
                                             </motion.div>
                                           </TableCell>
                                         </TableRow>

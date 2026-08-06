@@ -432,7 +432,7 @@ export default function AssignPage() {
                         disabled={loadingJobs}
                       >
                         <SelectTrigger className='w-full text-left'>
-                          <SelectValue placeholder='— Pilih job yang akan dialokasikan —' />
+                          <SelectValue placeholder='Pilih job yang akan dialokasikan' />
                         </SelectTrigger>
                         <SelectContent>
                           {loadingJobs && (
@@ -533,7 +533,7 @@ export default function AssignPage() {
                                     <StatusBadge status={v.status ?? 'planned'} />
                                   </CardTitle>
                                   <CardDescription>
-                                    Estimasi Waktu: {v.route_total_time_min ?? '—'} min
+                                    Estimasi Waktu: {v.route_total_time_min ?? '-'} min
                                   </CardDescription>
                                 </CardHeader>
 
@@ -582,7 +582,7 @@ export default function AssignPage() {
                                         }
                                       >
                                         <SelectTrigger id={`op-${rvKey}`}>
-                                          <SelectValue placeholder='— Pilih Operator —' />
+                                          <SelectValue placeholder='Pilih Operator' />
                                         </SelectTrigger>
                                         <SelectContent>
                                           {operators
@@ -611,14 +611,14 @@ export default function AssignPage() {
                                         }
                                       >
                                         <SelectTrigger id={`veh-${rvKey}`}>
-                                          <SelectValue placeholder='— Pilih Kendaraan —' />
+                                          <SelectValue placeholder='Pilih Kendaraan' />
                                         </SelectTrigger>
                                         <SelectContent>
                                           {vehicles
                                             .filter((vv) => vv.active)
                                             .map((vv) => (
                                               <SelectItem key={vv.id} value={vv.id}>
-                                                {vv.plate} — {vv.capacityL}L
+                                                {vv.plate} ({vv.capacityL}L)
                                               </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -865,7 +865,7 @@ export default function AssignPage() {
                                   className='hover:bg-muted/50 transition-colors'
                                 >
                                   <TableCell className='font-medium'>{o.name}</TableCell>
-                                  <TableCell>{o.phone ?? '—'}</TableCell>
+                                  <TableCell>{o.phone ?? '-'}</TableCell>
                                   <TableCell>
                                     <Badge variant={o.active ? 'default' : 'secondary'}>
                                       {o.active ? 'Aktif' : 'Nonaktif'}

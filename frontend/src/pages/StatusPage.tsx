@@ -271,7 +271,7 @@ export default function StatusPage() {
                 disabled={loadingJobs}
               >
                 <SelectTrigger className='w-full text-left'>
-                  <SelectValue placeholder='— Pilih job yang akan di-update —' />
+                  <SelectValue placeholder='Pilih job yang akan di-update' />
                 </SelectTrigger>
                 <SelectContent>
                   {loadingJobs && (

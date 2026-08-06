@@ -12,6 +12,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .routers.optimize import router as optimize_router
 from .settings import settings
@@ -52,6 +53,13 @@ def health_check():
 
 # Stateless demo router is ALWAYS mounted — it works in both modes.
 app.include_router(optimize_router)
+
+# Static convergence/gantt PNGs + interactive route-map HTML the experiment notebooks
+# render per (dataset, algorithm/level). /experiments/{type}/assets (in optimize router)
+# lists which filenames exist; this mount serves the actual bytes.
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "data", "experiments", "assets")
+if os.path.isdir(_ASSETS_DIR):
+    app.mount("/experiment-assets", StaticFiles(directory=_ASSETS_DIR), name="experiment-assets")
 
 
 # --- Operational-mode-only routers (require Supabase / DATABASE_URL) -----------------

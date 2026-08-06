@@ -6,21 +6,21 @@ import GroupsPage from './pages/GroupsPage'
 import StatusPage from './pages/StatusPage'
 import AssignPage from './pages/AssignPage'
 import LogsPage from './pages/LogsPage'
-import NodeEditorPage from './pages/NodeEditorPage' // Halaman baru Anda
+import NodeEditorPage from './pages/NodeEditorPage'
+import ResultsPage from './pages/ResultsPage'
 
-// Definisikan rute-rute Anda
 const routes = [
   {
     path: '/',
-    element: <AppShell />, // Gunakan AppShell sebagai layout
+    element: <AppShell />,
     children: [
-      // Halaman-halaman ini akan di-render di dalam <Outlet /> AppShell
       { path: '/', element: <OptimizePage /> },
+      { path: '/results', element: <ResultsPage /> },
       { path: '/groups', element: <GroupsPage /> },
       { path: '/status', element: <StatusPage /> },
       { path: '/assign', element: <AssignPage /> },
       { path: '/logs', element: <LogsPage /> },
-      { path: '/editor', element: <NodeEditorPage /> }, // Tambahkan rute editor
+      { path: '/editor', element: <NodeEditorPage /> },
     ],
   },
 ]

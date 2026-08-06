@@ -1,0 +1,7 @@
+dataset,level_label,n_vehicles,total_time_mean,fitness_mean,total_time_std,total_time_min,fitness_min,makespan_mean,makespan_std,route_std_mean,active_veh_mean,refill_mean,feasible_rate,comp_time_mean
+Dataset A,full,9,2828.217,2878.498,80.058,2692.5,2836.73,334.501,6.33,14.122,9.0,72.8,1.0,4.306
+Dataset A,moderate,7,2754.814,2784.066,82.312,2636.14,2749.55,413.197,12.935,13.919,7.0,74.6,1.0,4.143
+Dataset A,severe,6,2696.808,2771.295,76.771,2575.95,2724.28,472.585,11.723,16.764,6.0,74.6,1.0,3.969
+Dataset B,full,5,1591.805,1647.423,42.997,1517.45,1616.15,335.602,13.198,13.003,5.0,49.8,1.0,2.304
+Dataset B,moderate,4,1580.433,1633.086,30.705,1526.85,1629.11,421.695,10.3,18.625,4.0,50.9,1.0,2.314
+Dataset B,severe,3,1608.875,1614.143,0.869,1608.34,1612.01,550.192,0.578,14.89,3.0,51.0,0.0,2.307

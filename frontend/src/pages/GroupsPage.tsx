@@ -209,13 +209,13 @@ export default function GroupsPage() {
                 >
                   <TableCell className='font-medium'>{g.name}</TableCell>
                   <TableCell className='text-muted-foreground truncate max-w-xs'>
-                    {g.description || '—'}
+                    {g.description || '-'}
                   </TableCell>
                   <TableCell>
                     <Badge variant='secondary'>{g.nodeIds?.length ?? 0} titik</Badge>
                   </TableCell>
                   <TableCell className='text-muted-foreground text-sm'>
-                    {g.createdAt ? new Date(g.createdAt).toLocaleString() : '—'}
+                    {g.createdAt ? new Date(g.createdAt).toLocaleString() : '-'}
                   </TableCell>
                   <TableCell className='text-right'>
                     {/* UPGRADE ke DropdownMenu */}

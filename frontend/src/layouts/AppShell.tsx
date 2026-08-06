@@ -15,6 +15,7 @@ import {
     Activity,
     PanelLeft,
     PanelRight,
+    BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +33,7 @@ const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? "1") === "1";
 
 const ALL_NAV_LINKS = [
     { to: "/", label: "Optimize", icon: Map, demo: true },
+    { to: "/results", label: "Results", icon: BarChart3, demo: true },
     { to: "/groups", label: "Group Management", icon: ClipboardList, demo: false },
     { to: "/assign", label: "Assignment", icon: Users, demo: false },
     { to: "/status", label: "Field Status", icon: Activity, demo: false },
@@ -213,6 +215,7 @@ function AppNav({ isCollapsed }: { isCollapsed: boolean }) {
 export default function AppShell() {
     const [open, setOpen] = useState(false);
     const { isSidebarCollapsed } = useUI();
+    const { pathname } = useLocation();
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -249,6 +252,29 @@ export default function AppShell() {
                         <div className="hidden md:flex items-center gap-2">
                             <AppLogo />
                         </div>
+
+                        {DEMO_MODE && (
+                            <nav className="hidden md:flex items-center gap-1 ml-6">
+                                {navLinks.map((link) => {
+                                    const isActive = pathname === link.to;
+                                    return (
+                                        <NavLink
+                                            key={link.to}
+                                            to={link.to}
+                                            className={cn(
+                                                "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors",
+                                                isActive
+                                                    ? "bg-primary text-primary-foreground font-medium"
+                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                            )}
+                                        >
+                                            <link.icon className="h-4 w-4" />
+                                            {link.label}
+                                        </NavLink>
+                                    );
+                                })}
+                            </nav>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2">

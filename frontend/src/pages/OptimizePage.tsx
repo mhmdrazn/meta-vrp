@@ -99,6 +99,8 @@ export default function OptimizePage() {
     const { datasetId, setDatasetId } = useDataset();
     const { maxVehicles, setMaxVehicles, selected, setSelected } = useUI();
 
+    const [algorithm, setAlgorithm] = useState<'aco' | 'alns_standard' | 'alns_hybrid'>('alns_hybrid');
+
     // Refill availability control (100% / 50% / 25%).
     // Deterministic subset: keep every Nth refill (indices sorted). Reviewer-friendly —
     // reproducible without needing a seed input in the UI.
@@ -255,7 +257,7 @@ export default function OptimizePage() {
             num_vehicles: maxVehicles,
             selected_node_ids: node_ids,
             dataset_id: datasetId,
-            algorithm: "alns_hybrid",
+            algorithm,
             refill_ids_override: buildRefillSubset(),
             // Shorter demo budget so reviewers don't wait too long on a busy Vercel function.
             time_limit_sec: 10,
@@ -411,7 +413,7 @@ export default function OptimizePage() {
                 pdf.setFontSize(12);
                 pdf.setTextColor(0, 0, 0);
                 pdf.text(
-                    `Vehicle #${route.vehicle_id} Route`,
+                    `Vehicle #${route.vehicle_id + 1} Route`,
                     margin + 3,
                     currentY + 7,
                 );
@@ -559,7 +561,7 @@ export default function OptimizePage() {
         <section className="relative">
             {/* Header - Fixed Sticky with proper z-index */}
             <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm shadow-none border-b-0">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4">
                     <div className="space-y-1">
                         <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                             Route Optimization
@@ -584,7 +586,7 @@ export default function OptimizePage() {
                         </div>
                     </div>
                 </div>
-                <div className="px-6 pb-6">
+                <div className="pb-6">
                     <DemoDisclaimer />
                 </div>
             </div>
@@ -764,7 +766,7 @@ export default function OptimizePage() {
                                             <SelectContent>
                                                 {(datasetsQ.data ?? []).map((d) => (
                                                     <SelectItem key={d.id} value={d.id}>
-                                                        {d.label} — {d.park_count} parks, {d.refill_count} refills
+                                                        {d.label} ({d.park_count} parks, {d.refill_count} refills)
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -872,7 +874,22 @@ export default function OptimizePage() {
                                         />
                                     </div>
 
-                                    {/* Refill availability control (TASK 8) */}
+                                    {/* Algorithm selector */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="algorithm">Algorithm</Label>
+                                        <Select value={algorithm} onValueChange={(v) => setAlgorithm(v as typeof algorithm)}>
+                                            <SelectTrigger id="algorithm">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="aco">ACO (Ant Colony)</SelectItem>
+                                                <SelectItem value="alns_standard">Standard ALNS</SelectItem>
+                                                <SelectItem value="alns_hybrid">Hybrid ALNS</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Refill availability control */}
                                     <div className="space-y-2">
                                         <Label>Refill Station Availability</Label>
                                         <div className="grid grid-cols-3 gap-2">
@@ -923,7 +940,7 @@ export default function OptimizePage() {
                                                 className="w-full"
                                             />
                                             <p className="text-sm text-muted-foreground">
-                                                Estimated: ~10s (demo budget)
+                                                Estimated: ~10s
                                             </p>
                                         </div>
                                     )}
@@ -960,8 +977,8 @@ export default function OptimizePage() {
                                     <CardContent className="pt-0 flex-1 flex flex-col min-h-0">
                                         {selectedParks.length > 0 ? (
                                             <div className="flex-1 flex flex-col min-h-0">
-                                                <ScrollArea className="flex-1 min-h-0 pr-3">
-                                                    <div className="space-y-2">
+                                                <ScrollArea className="flex-1 min-h-0 max-h-[280px] pr-3">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                                         {selectedParks.map(
                                                             (park) => {
                                                                 const demandColor =
@@ -973,22 +990,22 @@ export default function OptimizePage() {
                                                                         key={
                                                                             park.id
                                                                         }
-                                                                        className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors group"
+                                                                        className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors group"
                                                                     >
-                                                                        <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className="flex items-center gap-2 min-w-0">
                                                                             <div
-                                                                                className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm"
+                                                                                className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
                                                                                 style={{
                                                                                     backgroundColor:
                                                                                         demandColor,
                                                                                 }}
                                                                             />
                                                                             <div className="min-w-0">
-                                                                                <p className="text-sm font-medium truncate">
+                                                                                <p className="text-xs font-medium truncate">
                                                                                     {park.name ??
                                                                                         park.id}
                                                                                 </p>
-                                                                                <p className="text-xs text-muted-foreground">
+                                                                                <p className="text-[11px] text-muted-foreground">
                                                                                     {park.demand?.toLocaleString(
                                                                                         "id-ID",
                                                                                     )}{" "}
@@ -999,14 +1016,14 @@ export default function OptimizePage() {
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
-                                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                            className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                             onClick={() =>
                                                                                 toggle(
                                                                                     park.id,
                                                                                 )
                                                                             }
                                                                         >
-                                                                            <X className="h-4 w-4" />
+                                                                            <X className="h-3.5 w-3.5" />
                                                                         </Button>
                                                                     </div>
                                                                 );
@@ -1044,90 +1061,6 @@ export default function OptimizePage() {
                                 </Card>
                             )}
 
-                            <AnimatePresence>
-                                {data && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 15 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        ref={summaryRef}
-                                    >
-                                        <Card>
-                                            <CardHeader className="py-4 flex-row items-center justify-between gap-2">
-                                                <CardTitle className="text-base">
-                                                    Results Summary
-                                                </CardTitle>
-                                                <div className="flex items-center gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={
-                                                            handleExportPDF
-                                                        }
-                                                        disabled={isExporting}
-                                                    >
-                                                        {isExporting ? (
-                                                            <Loader2 className="animate-spin h-4 w-4" />
-                                                        ) : (
-                                                            <FileDown className="h-4 w-4 mr-1" />
-                                                        )}{" "}
-                                                        PDF
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={
-                                                            handleClearResult
-                                                        }
-                                                    >
-                                                        <Trash2 className="h-4 w-4 mr-1" />
-                                                        Clear
-                                                    </Button>
-                                                </div>
-                                            </CardHeader>
-                                            <CardContent className="text-sm space-y-2">
-                                                <div className="flex justify-between p-3 bg-muted/50 rounded-md">
-                                                    <span>Makespan</span>
-                                                    <b>
-                                                        {data.makespan?.toFixed(2) ?? data.objective_time_min}{" "}
-                                                        min
-                                                    </b>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Total Routing Time</span>
-                                                    <b>{data.total_time?.toFixed(2) ?? "—"} min</b>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Route-Time Std Dev</span>
-                                                    <b>{data.route_time_std?.toFixed(2) ?? "—"} min</b>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Active Vehicles</span>
-                                                    <b>{data.active_vehicles ?? data.vehicle_used}</b>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Refill Visits</span>
-                                                    <b>{data.refill_visits ?? "—"}</b>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span>Feasible</span>
-                                                    <b className={data.feasible === false ? "text-destructive" : "text-green-600"}>
-                                                        {data.feasible === false ? "No" : "Yes"}
-                                                    </b>
-                                                </div>
-                                                <div className="flex justify-between text-xs text-muted-foreground pt-1">
-                                                    <span>Algorithm</span>
-                                                    <span>{data.algorithm ?? "alns_hybrid"}</span>
-                                                </div>
-                                                <div className="flex justify-between text-xs text-muted-foreground">
-                                                    <span>Compute Time</span>
-                                                    <span>{data.computation_time?.toFixed(2) ?? "—"} s</span>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
                             {isFetchingRoutes && (
                                 <motion.div
                                     initial={{ opacity: 0 }}
@@ -1145,7 +1078,112 @@ export default function OptimizePage() {
                 </div>
             </div>
 
-            {/* Bawah: Tabel Detail */}
+            {/* Clear / Export bar — visible only when results exist */}
+            <AnimatePresence>
+                {data && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center justify-end gap-2 mt-4"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleExportPDF}
+                            disabled={isExporting}
+                        >
+                            {isExporting ? (
+                                <Loader2 className="animate-spin h-4 w-4" />
+                            ) : (
+                                <FileDown className="h-4 w-4 mr-1" />
+                            )}{" "}
+                            Export PDF
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleClearResult}
+                        >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Clear Results
+                        </Button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Results Summary — full width */}
+            <AnimatePresence>
+                {data && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4"
+                        ref={summaryRef}
+                    >
+                        <Card>
+                            <CardHeader className="py-4">
+                                <CardTitle className="text-lg">
+                                    Results Summary
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Makespan</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.makespan?.toFixed(2) ?? data.objective_time_min} <span className="text-sm font-normal text-muted-foreground">min</span>
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Total Routing Time</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.total_time?.toFixed(2) ?? "-"} <span className="text-sm font-normal text-muted-foreground">min</span>
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Route-Time Std Dev</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.route_time_std?.toFixed(2) ?? "-"} <span className="text-sm font-normal text-muted-foreground">min</span>
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Active Vehicles</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.active_vehicles ?? data.vehicle_used}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Refill Visits</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.refill_visits ?? "-"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Feasible</p>
+                                        <p className={`text-lg font-semibold ${data.feasible === false ? "text-destructive" : "text-green-600"}`}>
+                                            {data.feasible === false ? "No" : "Yes"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Algorithm</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.algorithm === "aco" ? "ACO" : data.algorithm === "alns_standard" ? "Standard ALNS" : "Hybrid ALNS"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                                        <p className="text-xs text-muted-foreground">Compute Time</p>
+                                        <p className="text-lg font-semibold">
+                                            {data.computation_time?.toFixed(2) ?? "-"} <span className="text-sm font-normal text-muted-foreground">s</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Route Details table */}
             <AnimatePresence>
                 {data?.routes?.length ? (
                     <motion.div
@@ -1209,7 +1247,7 @@ export default function OptimizePage() {
                                                                 }}
                                                             ></div>
                                                             <span className="font-medium">
-                                                                #{r.vehicle_id}
+                                                                #{r.vehicle_id + 1}
                                                             </span>
                                                         </div>
                                                     </TableCell>

@@ -1,0 +1,7 @@
+Dataset,Algorithm,Best Fitness,Mean Fitness,Std Fitness,Mean Total Time,Mean Makespan,Mean Route Std,Mean Active Veh,Mean Refill,Feasible %,Mean Comp Time (s)
+Dataset A,ACO,2937.21,2973.0,17.4,2830.7,300.1,10.8,10.0,70.6,100.0,54.27
+Dataset A,ALNS,2910.54,3002.4,57.5,2856.5,307.4,13.7,10.0,72.3,100.0,9.41
+Dataset A,Hybrid,2884.69,2912.9,15.9,2892.3,312.0,14.0,10.0,72.5,100.0,7.05
+Dataset B,ACO,1644.55,1663.8,8.3,1564.1,326.7,9.5,5.0,49.4,100.0,80.29
+Dataset B,ALNS,1630.97,1661.1,20.7,1560.8,327.7,11.4,5.0,49.6,100.0,4.9
+Dataset B,Hybrid,1616.15,1646.4,8.9,1598.4,337.4,13.9,5.0,49.8,100.0,4.04

@@ -4,11 +4,11 @@ import { ChevronDown, ChevronUp, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ROUTE_COLORS = [
-  { color: '#1d4ed8', label: 'Biru' },
-  { color: '#c026d3', label: 'Ungu' },
+  { color: '#1d4ed8', label: 'Blue' },
+  { color: '#c026d3', label: 'Purple' },
   { color: '#db2777', label: 'Pink' },
-  { color: '#ea580c', label: 'Oranye' },
-  { color: '#ca8a04', label: 'Kuning' },
+  { color: '#ea580c', label: 'Orange' },
+  { color: '#ca8a04', label: 'Yellow' },
   { color: '#059669', label: 'Emerald' },
 ]
 
@@ -27,7 +27,7 @@ export default function MapLegend() {
         onClick={() => setIsOpen(!isOpen)}
       >
         <Info className='w-3 h-3 mr-2' />
-        {isOpen ? 'Tutup' : 'Legenda'}
+        {isOpen ? 'Close' : 'Legend'}
         {/* Logika Panah: Jika buka (isOpen), panah ATAS (tutup). Jika tutup, panah BAWAH (buka). */}
         {isOpen ? <ChevronUp className='w-3 h-3 ml-1' /> : <ChevronDown className='w-3 h-3 ml-1' />}
       </Button>
@@ -42,12 +42,11 @@ export default function MapLegend() {
             'animate-in slide-in-from-top-2 duration-200',
           )}
         >
-          <h4 className='font-semibold mb-2'>Keterangan Peta</h4>
+          <h4 className='font-semibold mb-2'>Map Legend</h4>
 
-          {/* Bagian 1: Tipe Lokasi */}
           <div className='space-y-1.5 mb-3'>
             <div className='font-medium text-[10px] text-muted-foreground uppercase tracking-wider'>
-              Lokasi
+              Locations
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-5 h-5 rounded-full border-2 border-gray-600 bg-white flex items-center justify-center shadow-sm'>
@@ -56,7 +55,7 @@ export default function MapLegend() {
                   <polyline points='9 22 9 12 15 12 15 22' />
                 </svg>
               </div>
-              <span>Depot Pusat</span>
+              <span>Central Depot</span>
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-5 h-5 rounded-full border-2 border-blue-600 bg-white flex items-center justify-center shadow-sm'>
@@ -64,7 +63,7 @@ export default function MapLegend() {
                   <path d='M12 22a7 7 0 0 0 7-7c0-2-5-9-7-15-2 6-7 13-7 15a7 7 0 0 0 7 7z' />
                 </svg>
               </div>
-              <span>Sumber Air</span>
+              <span>Refill Station</span>
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-5 h-5 rounded-full border-2 border-green-600 bg-white flex items-center justify-center shadow-sm'>
@@ -79,39 +78,37 @@ export default function MapLegend() {
                   <path d='M12 19v3' />
                 </svg>
               </div>
-              <span>Taman Kota</span>
+              <span>City Park</span>
             </div>
           </div>
 
-          {/* Bagian 2: Warna Demand */}
           <div className='space-y-1.5 mb-3'>
             <div className='font-medium text-[10px] text-muted-foreground uppercase tracking-wider'>
-              Kebutuhan Air
+              Water Demand
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-3 h-3 rounded bg-green-600 opacity-80'></div>
-              <span>&lt; 10k Liter (Rendah)</span>
+              <span>&lt; 10k Liters (Low)</span>
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-3 h-3 rounded bg-yellow-600 opacity-80'></div>
-              <span>10k-20k Liter (Sedang)</span>
+              <span>10k-20k Liters (Medium)</span>
             </div>
             <div className='flex items-center gap-2'>
               <div className='w-3 h-3 rounded bg-red-600 opacity-80'></div>
-              <span>&gt; 20k Liter (Tinggi)</span>
+              <span>&gt; 20k Liters (High)</span>
             </div>
           </div>
 
-          {/* Bagian 3: Rute Kendaraan */}
           <div className='space-y-1.5'>
             <div className='font-medium text-[10px] text-muted-foreground uppercase tracking-wider'>
-              Rute Kendaraan
+              Vehicle Routes
             </div>
             <div className='grid grid-cols-2 gap-2'>
               {ROUTE_COLORS.map((rc, idx) => (
                 <div key={idx} className='flex items-center gap-2'>
                   <div className='w-6 h-1 rounded-full' style={{ backgroundColor: rc.color }}></div>
-                  <span className='text-[10px]'>Mobil {idx + 1}</span>
+                  <span className='text-[10px]'>Vehicle {idx + 1}</span>
                 </div>
               ))}
             </div>

@@ -45,6 +45,27 @@ export const Api = {
 
   // Dataset discovery — powers the Dataset A/B selector in OptimizePage.
   listDatasets: () => getJSON<Dataset[]>('/datasets'),
+
+  // Experiment results — pre-computed CSV data served as JSON.
+  getExperiments: (type: string, datasetId?: string) => {
+    const params: Record<string, string> = {}
+    if (datasetId) params.dataset_id = datasetId
+    return getJSON<Record<string, any>[]>(`/experiments/${type}`, params)
+  },
+
+  // Which convergence/gantt/route-map filenames actually exist for this experiment
+  // type + dataset (notebooks don't render every asset for every scenario).
+  getExperimentAssets: (type: string, datasetId?: string) => {
+    const params: Record<string, string> = {}
+    if (datasetId) params.dataset_id = datasetId
+    return getJSON<string[]>(`/experiments/${type}/assets`, params)
+  },
+
+  // Direct URL to a static experiment asset (PNG or HTML), served by the backend's
+  // /experiment-assets mount — not routed through axios since it's loaded as an
+  // <img src> / link href, not fetched as JSON.
+  experimentAssetUrl: (type: string, filename: string) =>
+    `${API_BASE_URL}/experiment-assets/${type}/${filename}`,
   listLogs: () => getJSON<LogEntry[]>('/logs'),
   listGroups: async (): Promise<Group[]> => {
     const raw = await getJSON<any[]>('/groups')

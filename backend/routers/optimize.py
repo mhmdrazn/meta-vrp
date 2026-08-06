@@ -5,12 +5,15 @@
 - GET  /nodes        : list nodes for the selected dataset (backend-served, replaces the
                       hardcoded LOCAL_NODES in the frontend once TASK 8 lands).
 - GET  /datasets     : discovery endpoint powering the frontend Dataset A/B selector.
+- GET  /experiments  : serve pre-computed experiment CSVs as JSON (baseline, scenario1, scenario2).
 """
 from __future__ import annotations
 
+import csv
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FTimeout
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -178,3 +181,127 @@ def list_datasets() -> List[DatasetOut]:
             )
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Experiment results endpoint — serves pre-computed CSV data as JSON.
+# ---------------------------------------------------------------------------
+
+_EXPERIMENTS_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "experiments")
+
+VALID_EXPERIMENTS = ("baseline", "scenario1", "scenario2")
+
+
+def _normalize_dataset_id(v: str) -> str:
+    """The notebooks print human labels ("Dataset A"); the rest of the app (routers,
+    frontend Select values) uses the slug form ("dataset_a"). Normalize here so the
+    /experiments dataset_id filter matches the same convention as /datasets and
+    /optimize, instead of leaking the notebook's display string as an API identifier."""
+    return v.strip().lower().replace(" ", "_")
+
+
+def _read_csv(path: str) -> List[Dict[str, Any]]:
+    """Read a CSV file and return as list of dicts with numeric coercion."""
+    rows: List[Dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for raw in reader:
+            row: Dict[str, Any] = {}
+            for k, v in raw.items():
+                if v is None or v == "":
+                    row[k] = None
+                    continue
+                if k == "dataset":
+                    row[k] = _normalize_dataset_id(v)
+                    continue
+                if v.lower() in ("true", "false"):
+                    row[k] = v.lower() == "true"
+                    continue
+                try:
+                    row[k] = int(v)
+                except ValueError:
+                    try:
+                        row[k] = float(v)
+                    except ValueError:
+                        row[k] = v
+            rows.append(row)
+    return rows
+
+
+@router.get("/experiments/{experiment_type}")
+def get_experiments(
+    experiment_type: str,
+    dataset_id: Optional[str] = Query(None),
+) -> List[Dict[str, Any]]:
+    """Return pre-computed experiment results as JSON.
+
+    experiment_type: baseline | scenario1 | scenario2
+    dataset_id (optional): filter to a single dataset (e.g. dataset_a).
+    """
+    if experiment_type not in VALID_EXPERIMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid experiment type. Valid: {VALID_EXPERIMENTS}",
+        )
+
+    exp_dir = os.path.normpath(_EXPERIMENTS_DIR)
+    if not os.path.isdir(exp_dir):
+        raise HTTPException(status_code=404, detail="No experiment data available.")
+
+    all_rows: List[Dict[str, Any]] = []
+    for fname in sorted(os.listdir(exp_dir)):
+        if not fname.startswith(f"{experiment_type}_") or not fname.endswith(".csv"):
+            continue
+        fpath = os.path.join(exp_dir, fname)
+        try:
+            all_rows.extend(_read_csv(fpath))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Failed to read experiment file %s: %s", fname, e)
+
+    if dataset_id:
+        all_rows = [r for r in all_rows if r.get("dataset") == dataset_id]
+
+    return all_rows
+
+
+# ---------------------------------------------------------------------------
+# Experiment assets — convergence/gantt PNGs + interactive route-map HTML that the
+# notebooks render per (dataset, algorithm/level). Static bytes are served by the
+# StaticFiles mount in app.py at /experiment-assets/<experiment_type>/<filename>;
+# this endpoint just tells the frontend which filenames actually exist so it isn't
+# guessing (scenario2 has no per-level convergence/gantt, only a combined chart).
+# ---------------------------------------------------------------------------
+
+_ASSETS_DIR = os.path.join(_EXPERIMENTS_DIR, "assets")
+
+_DATASET_LABELS = {"dataset_a": "DatasetA", "dataset_b": "DatasetB"}
+
+
+@router.get("/experiments/{experiment_type}/assets")
+def get_experiment_assets(
+    experiment_type: str,
+    dataset_id: Optional[str] = Query(None),
+) -> List[str]:
+    """List available asset filenames for an experiment type, optionally filtered
+    to one dataset's files (matched by the notebook's "DatasetA"/"DatasetB" prefix)."""
+    if experiment_type not in VALID_EXPERIMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid experiment type. Valid: {VALID_EXPERIMENTS}",
+        )
+
+    asset_dir = os.path.normpath(os.path.join(_ASSETS_DIR, experiment_type))
+    if not os.path.isdir(asset_dir):
+        return []
+
+    fnames = sorted(os.listdir(asset_dir))
+    if dataset_id:
+        prefix = _DATASET_LABELS.get(dataset_id)
+        other_prefixes = [p for p in _DATASET_LABELS.values() if p != prefix]
+        # Keep files for this dataset, plus dataset-agnostic shared charts (e.g.
+        # scenario2's combined convergence grid covers both datasets in one image).
+        fnames = [
+            f for f in fnames
+            if (prefix and f.startswith(prefix)) or not f.startswith(tuple(other_prefixes))
+        ]
+    return fnames
