@@ -1,7 +1,7 @@
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
-experiments/
-notebooks/
+/experiments/
+/notebooks/
 .git/
 .vscode/

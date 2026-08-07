@@ -77,8 +77,8 @@ Thumbs.db
 # ===========================
 # Experiments
 # ===========================
-experiments/
-notebooks/
+/experiments/
+/notebooks/
 
 # ===========================
 # Logs
