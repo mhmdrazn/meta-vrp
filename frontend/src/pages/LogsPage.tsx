@@ -832,7 +832,7 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
       </TabsContent>
 
       {/* --- Tab 2: Kendaraan --- */}
-            {/* --- Tab 2: Kendaraan --- */}
+      {/* --- Tab 2: Kendaraan --- */}
       <TabsContent value='vehicles' className='space-y-4'>
         <AnimatePresence mode='wait'>
           {vehicles.length === 0 ? (
@@ -866,14 +866,15 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
                           const assignedVeh = vehiclesCatalog.find(
                             (vv) =>
                               String(vv.id) ===
-                              String((v as any).assigned_vehicle_id ?? (v as any).assignedVehicleId),
+                              String(
+                                (v as any).assigned_vehicle_id ?? (v as any).assignedVehicleId,
+                              ),
                           )
                           const assignedOp = operatorsCatalog.find(
                             (oo) =>
                               String(oo.id) ===
                               String(
-                                (v as any).assigned_operator_id ??
-                                  (v as any).assignedOperatorId,
+                                (v as any).assigned_operator_id ?? (v as any).assignedOperatorId,
                               ),
                           )
 
@@ -948,7 +949,6 @@ function DetailsContent({ detail }: { detail: JobDetail }) {
           )}
         </AnimatePresence>
       </TabsContent>
-
 
       {/* --- Tab 3: Rute --- */}
       <TabsContent value='routes' className='space-y-4'>
