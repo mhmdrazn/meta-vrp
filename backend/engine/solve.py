@@ -24,6 +24,7 @@ import numpy as np
 
 from .algorithms.aco import ACOConfig, aco_optimize
 from .algorithms.alns import ALNSConfig, alns_optimize
+from .algorithms.hybrid import HybridConfig, hybrid_optimize
 from .construct import greedy_construct
 from .data import Node, TimeMatrix
 from .evaluation import (
@@ -35,7 +36,6 @@ from .evaluation import (
     route_time_std,
     total_time_minutes,
 )
-from .improve import improve_routes
 from .utils import (
     build_groups_from_expanded_ids,
     ensure_all_routes_capacity,
@@ -260,6 +260,7 @@ def solve(
     seed: int = 42,
     alns_cfg: Optional[ALNSConfig] = None,
     aco_cfg: Optional[object] = None,
+    hybrid_cfg: Optional[HybridConfig] = None,
     alns_time_frac: float = 0.9,
 ) -> dict:
     """Universal solver — one interface, three algorithms, same output shape.
@@ -318,13 +319,9 @@ def solve(
     refill_ids = list(refill_ids)
 
     # 4) Configure algorithm-specific time budgets
-    if algorithm == "alns_hybrid":
-        alns_time = max(0.0, time_limit_sec * alns_time_frac)
-        improve_time = max(0.1, time_limit_sec - alns_time)
-    else:
-        # standard_alns / aco each get the full budget
-        alns_time = time_limit_sec
-        improve_time = 0.0
+    # All algorithms now get the full time budget (hybrid no longer needs a split)
+    alns_time = time_limit_sec
+    improve_time = 0.0
 
     if alns_cfg is None:
         alns_cfg = ALNSConfig(time_limit_sec=alns_time, seed=seed)
@@ -395,7 +392,27 @@ def solve(
         algo_dur = time.perf_counter() - t_a0
     elif algorithm == "alns_hybrid":
         t_a0 = time.perf_counter()
-        routes = alns_optimize(
+        hybrid_cfg_effective = hybrid_cfg if isinstance(hybrid_cfg, HybridConfig) else HybridConfig(
+            time_limit_sec=time_limit_sec, seed=seed
+        )
+        # Force the caller's overall time budget onto Hybrid
+        hybrid_cfg_effective = HybridConfig(
+            time_limit_sec=time_limit_sec,
+            seed=seed if hybrid_cfg_effective.seed == HybridConfig.seed else hybrid_cfg_effective.seed,
+            init_temperature=hybrid_cfg_effective.init_temperature,
+            cooling_rate=hybrid_cfg_effective.cooling_rate,
+            min_temperature=hybrid_cfg_effective.min_temperature,
+            k_remove_min=hybrid_cfg_effective.k_remove_min,
+            k_remove_max=hybrid_cfg_effective.k_remove_max,
+            score_update_period=hybrid_cfg_effective.score_update_period,
+            react=hybrid_cfg_effective.react,
+            alpha=hybrid_cfg_effective.alpha,
+            beta=hybrid_cfg_effective.beta,
+            rho=hybrid_cfg_effective.rho,
+            deposit_multiplier=hybrid_cfg_effective.deposit_multiplier,
+            rebalance_period=hybrid_cfg_effective.rebalance_period,
+        )
+        routes = hybrid_optimize(
             init_routes=routes,
             nodes=nodes_exp,
             tm=tm_exp,
@@ -403,23 +420,10 @@ def solve(
             refill_ids=refill_ids,
             depot_id=depot_id,
             allow_refill=allow_refill,
-            cfg=alns_cfg,
             groups=groups,
+            cfg=hybrid_cfg_effective,
         )
         algo_dur = time.perf_counter() - t_a0
-        t_i0 = time.perf_counter()
-        routes = improve_routes(
-            routes,
-            nodes_exp,
-            tm_exp,
-            vehicle_capacity=vehicle_capacity,
-            refill_ids=refill_ids,
-            depot_id=depot_id,
-            time_limit_sec=improve_time,
-            max_no_improve=10000,
-            groups=groups,
-        )
-        improve_dur = time.perf_counter() - t_i0
     elif algorithm == "aco":
         t_a0 = time.perf_counter()
         aco_cfg_effective = aco_cfg if isinstance(aco_cfg, ACOConfig) else ACOConfig(
@@ -435,9 +439,8 @@ def solve(
             alpha=aco_cfg_effective.alpha,
             beta=aco_cfg_effective.beta,
             rho=aco_cfg_effective.rho,
-            q0=aco_cfg_effective.q0,
-            tau_min_factor=aco_cfg_effective.tau_min_factor,
-            elitist=aco_cfg_effective.elitist,
+            q0_deposit=aco_cfg_effective.q0_deposit,
+            budget_factor=aco_cfg_effective.budget_factor,
         )
         routes = aco_optimize(
             init_routes=routes,

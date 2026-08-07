@@ -1,3 +1,17 @@
+"""ALNS (Adaptive Large Neighborhood Search) — aligned with Baseline Comparison notebook.
+
+Iteratively destroys and repairs parts of the solution.  Operator weights updated
+adaptively based on contribution.  Simulated annealing acceptance criterion.
+
+Destroy operators: random, worst, shaw (related), longest.
+Repair operators:  greedy (cheapest insertion), regret-2 (largest gap between top-2 trucks).
+
+Key changes from the previous implementation to match the notebook:
+  - Adaptive weight update: ``w = (1-react)*w + react*(score/count)`` every ``seg`` iters.
+  - SA scoring: 3=new global best, 2=improving, 1=SA-accepted, 0=rejected.
+  - _rebalance_solution: multi-pass heaviest→lightest park migration (from notebook).
+  - Config defaults: init_temperature=100, score_update_period=20 (seg=20), react=0.1.
+"""
 from __future__ import annotations
 
 import logging
@@ -44,8 +58,8 @@ class ALNSConfig:
     time_limit_sec: float = 8.0
     seed: int = 42
 
-    # SA acceptance
-    init_temperature: float = 1_000.0
+    # SA acceptance (notebook defaults)
+    init_temperature: float = 100.0
     cooling_rate: float = 0.995  # geometric
     min_temperature: float = 1e-3
 
@@ -53,23 +67,138 @@ class ALNSConfig:
     k_remove_min: int = 2
     k_remove_max: int = 8
 
-    # adaptive weights
-    w_improve: float = 5.0
-    w_accept: float = 2.0
-    w_reject: float = 0.5
-    score_update_period: int = 25
+    # adaptive weights (notebook style)
+    score_update_period: int = 20  # seg: update every N iters
+    react: float = 0.1             # reactivity factor
 
     # tabu
     tabu_tenure: int = 20
     use_tabu_on_removed_nodes: bool = True
 
-    # feasibility/penalty (opsional)
-    lambda_capacity: float = 0.0  # set >0 kalau mau penalti kapasitas
+    # feasibility/penalty
+    lambda_capacity: float = 0.0
 
     # repair strategy
     use_construct_as_repair: bool = False
     rebalance_period: int = 50
 
+    # optional iteration cap (None = time-limited only)
+    max_iter: Optional[int] = None
+
+    # Legacy fields kept for backward-compat with solve.py ALNSConfig construction
+    w_improve: float = 5.0
+    w_accept: float = 2.0
+    w_reject: float = 0.5
+
+
+# ---------------------------------------------------------------------------
+# Rebalance (ported from notebook's _rebalance_solution)
+# ---------------------------------------------------------------------------
+
+def _rebalance_solution(
+    routes: List[List[str]],
+    nodes: Dict[str, Node],
+    tm: TimeMatrix,
+    groups: Dict[str, List[str]],
+    vehicle_capacity: float,
+    refill_ids: List[str],
+    depot_id: str,
+    objective_fn,
+    max_passes: int = 10,
+) -> Tuple[List[List[str]], float]:
+    """Move park groups from heaviest truck to lightest until balanced.
+
+    Returns (routes, cost).
+    """
+    current = deepcopy_routes(routes)
+
+    for _ in range(max_passes):
+        durations: Dict[int, float] = {}
+        for ri, r in enumerate(current):
+            if len(r) > 2:
+                durations[ri] = route_time_minutes(r, nodes, tm)
+            else:
+                durations[ri] = 0.0
+
+        active = {k: v for k, v in durations.items() if v > 0}
+        if len(active) <= 1:
+            break
+
+        heaviest_idx = max(active, key=lambda k: active[k])
+        lightest_idx = min(active, key=lambda k: active[k])
+        gap = active[heaviest_idx] - active[lightest_idx]
+
+        mean_t = sum(active.values()) / len(active)
+        if mean_t < 1.0 or gap < mean_t * 0.15:
+            break
+
+        # Find park-group bases in the heaviest route
+        heavy_route = current[heaviest_idx]
+        bases_in_heavy: List[str] = []
+        seen_bases = set()
+        for nid in heavy_route[1:-1]:
+            node = nodes.get(nid)
+            if not node or node.type != "park":
+                continue
+            base = nid.split("#")[0]
+            if base not in seen_bases:
+                seen_bases.add(base)
+                bases_in_heavy.append(base)
+
+        if len(bases_in_heavy) <= 1:
+            break
+
+        best_move = None
+        best_new_gap = gap
+
+        for base in bases_in_heavy:
+            parts = groups.get(base, [base])
+
+            # Try moving all parts to lightest route
+            cand = deepcopy_routes(current)
+            cand[heaviest_idx] = [
+                nid for nid in cand[heaviest_idx] if nid not in parts
+            ]
+            if not cand[heaviest_idx] or cand[heaviest_idx][0] != depot_id:
+                cand[heaviest_idx].insert(0, depot_id)
+            if not cand[heaviest_idx] or cand[heaviest_idx][-1] != depot_id:
+                cand[heaviest_idx].append(depot_id)
+
+            insert_pos = max(1, len(cand[lightest_idx]) - 1)
+            cand[lightest_idx][insert_pos:insert_pos] = parts
+
+            cand, _ = ensure_all_routes_capacity(
+                cand, nodes, vehicle_capacity, refill_ids, tm, depot_id
+            )
+
+            # Check heaviest still has parks
+            has_park_h = any(
+                nodes.get(nid) and nodes[nid].type == "park"
+                for nid in cand[heaviest_idx][1:-1]
+            )
+            if not has_park_h:
+                continue
+
+            t_h = route_time_minutes(cand[heaviest_idx], nodes, tm)
+            t_l = route_time_minutes(cand[lightest_idx], nodes, tm)
+
+            new_gap = abs(t_h - t_l)
+            if new_gap < best_new_gap:
+                best_new_gap = new_gap
+                best_move = cand
+
+        if best_move is None:
+            break
+
+        current = best_move
+
+    cost = objective_fn(current)
+    return current, cost
+
+
+# ---------------------------------------------------------------------------
+# Main ALNS loop (aligned with notebook's run_alns)
+# ---------------------------------------------------------------------------
 
 def alns_optimize(
     init_routes: List[List[str]],
@@ -84,14 +213,8 @@ def alns_optimize(
 ) -> List[List[str]]:
     cfg = cfg or ALNSConfig()
 
-    log.info(f"ALNS starting with seed: {cfg.seed}")
+    log.info("ALNS starting with seed: %d", cfg.seed)
     set_seed(cfg.seed)
-
-    # reset failed-rebalance cache for this run
-    if hasattr(_rebalance_longest_shortest, "failed_moves"):
-        _rebalance_longest_shortest.failed_moves.clear()
-    else:
-        _rebalance_longest_shortest.failed_moves = set()
 
     # --- operator pools ---
     destroy_ops: List[Tuple[str, DestroyOp]] = [
@@ -105,12 +228,16 @@ def alns_optimize(
         ("regret2_insert", repair_regret2),
     ]
 
-    d_weights = [1.0] * len(destroy_ops)
-    r_weights = [1.0] * len(repair_ops)
-    d_scores = [0.0] * len(destroy_ops)
-    r_scores = [0.0] * len(repair_ops)
-    d_uses = [1e-9] * len(destroy_ops)
-    r_uses = [1e-9] * len(repair_ops)
+    n_destroy = len(destroy_ops)
+    n_repair = len(repair_ops)
+
+    # Adaptive weights (notebook style)
+    d_weights = [1.0] * n_destroy
+    r_weights = [1.0] * n_repair
+    d_scores = [0.0] * n_destroy
+    r_scores = [0.0] * n_repair
+    d_counts = [0] * n_destroy
+    r_counts = [0] * n_repair
 
     sa = SimulatedAnnealing(
         T=cfg.init_temperature, alpha=cfg.cooling_rate, Tmin=cfg.min_temperature
@@ -118,11 +245,10 @@ def alns_optimize(
 
     tabu = TabuList(maxlen=cfg.tabu_tenure)
 
-    # Shared objective (identical for ALNS and ACO — TASK 4 requirement).
-    weights = ObjectiveWeights()
+    weights_obj = ObjectiveWeights()
 
     def objective(routes: List[List[str]]) -> float:
-        return search_objective(routes, nodes, tm, weights)
+        return search_objective(routes, nodes, tm, weights_obj)
 
     # init
     best = deepcopy_routes(init_routes)
@@ -132,14 +258,17 @@ def alns_optimize(
 
     start = time.time()
     it = 0
-    reb_accepted = False
 
-    no_improve_iters = 0
-    MAX_NO_IMPROVE = 10000
+    def time_ok():
+        return time.time() - start < cfg.time_limit_sec
 
-    while time.time() - start < cfg.time_limit_sec:
+    def iter_ok():
+        if cfg.max_iter is not None:
+            return it < cfg.max_iter
+        return True
+
+    while time_ok() and iter_ok():
         it += 1
-        improved_best = False
 
         di = weighted_choice(d_weights)
         ri = weighted_choice(r_weights)
@@ -156,8 +285,7 @@ def alns_optimize(
         # --- REPAIR ---
         if cfg.use_construct_as_repair:
             repaired = greedy_construct(
-                nodes=nodes,
-                tm=tm,
+                nodes=nodes, tm=tm,
                 selected_parks=[p for p in removed if nodes[p].type == "park"],
                 depot_id=depot_id,
                 num_vehicles=len(partial),
@@ -167,10 +295,7 @@ def alns_optimize(
             )
         else:
             repaired = r_op(
-                partial,
-                removed,
-                nodes,
-                tm,
+                partial, removed, nodes, tm,
                 {
                     "vehicle_capacity": vehicle_capacity,
                     "refill_ids": refill_ids,
@@ -185,207 +310,73 @@ def alns_optimize(
         new_cost = objective(repaired)
         delta = new_cost - current_cost
 
-        # --- acceptance ---
-        accepted = False
-        if delta <= 0:
-            accepted = True
-        else:
-            accepted = sa.accept(delta)
+        # --- Acceptance (notebook scoring: 3/2/1/0) ---
+        d_counts[di] += 1
+        r_counts[ri] += 1
+        score = 0.0
 
-        if accepted:
+        if new_cost < best_cost - 1e-6:
+            # New global best
+            best_cost = new_cost
+            best = deepcopy_routes(repaired)
             current = repaired
             current_cost = new_cost
-            if new_cost < best_cost - 1e-9:
-                best = deepcopy_routes(repaired)
-                best_cost = new_cost
-                improved_best = True
-                d_scores[di] += cfg.w_improve
-                r_scores[ri] += cfg.w_improve
-            else:
-                d_scores[di] += cfg.w_accept
-                r_scores[ri] += cfg.w_accept
+            score = 3.0
+        elif new_cost < current_cost - 1e-6:
+            # Improving current
+            current = repaired
+            current_cost = new_cost
+            score = 2.0
+        elif sa.accept(delta):
+            # SA-accepted (worse)
+            current = repaired
+            current_cost = new_cost
+            score = 1.0
+        # else: rejected, score = 0.0
 
-            if cfg.use_tabu_on_removed_nodes:
-                tabu.add_many(removed)
-        else:
-            d_scores[di] += cfg.w_reject
-            r_scores[ri] += cfg.w_reject
+        d_scores[di] += score
+        r_scores[ri] += score
 
-        d_uses[di] += 1
-        r_uses[ri] += 1
+        if cfg.use_tabu_on_removed_nodes and score == 0.0:
+            tabu.add_many(removed)
 
+        # --- Adaptive weight update (notebook formula) ---
         if it % cfg.score_update_period == 0:
-            for i in range(len(d_weights)):
-                d_weights[i] = max(1e-3, d_weights[i] * (1.0 + d_scores[i] / d_uses[i]))
+            for i in range(n_destroy):
+                if d_counts[i] > 0:
+                    d_weights[i] = (1 - cfg.react) * d_weights[i] + cfg.react * (d_scores[i] / d_counts[i])
                 d_scores[i] = 0.0
-                d_uses[i] = 1e-9
-            for i in range(len(r_weights)):
-                r_weights[i] = max(1e-3, r_weights[i] * (1.0 + r_scores[i] / r_uses[i]))
+                d_counts[i] = 0
+            for i in range(n_repair):
+                if r_counts[i] > 0:
+                    r_weights[i] = (1 - cfg.react) * r_weights[i] + cfg.react * (r_scores[i] / r_counts[i])
                 r_scores[i] = 0.0
-                r_uses[i] = 1e-9
+                r_counts[i] = 0
 
+        # --- Rebalance ---
         if cfg.rebalance_period > 0 and it % cfg.rebalance_period == 0:
-            rebalanced_routes, rebalanced_cost, reb_accepted = (
-                _rebalance_longest_shortest(
-                    current,
-                    nodes,
-                    tm,
-                    vehicle_capacity,
-                    refill_ids,
-                    depot_id,
-                    groups,
-                    objective,
-                    current_cost,
-                    sa,
-                )
+            rebalanced, reb_cost = _rebalance_solution(
+                current, nodes, tm, groups,
+                vehicle_capacity, refill_ids, depot_id, objective,
             )
-            if reb_accepted:
-                current = rebalanced_routes
-                current_cost = rebalanced_cost
-                if rebalanced_cost < best_cost - 1e-9:
-                    best = deepcopy_routes(rebalanced_routes)
-                    best_cost = rebalanced_cost
-                    improved_best = True
+            reb_delta = reb_cost - current_cost
+            if reb_delta <= 0 or sa.accept(reb_delta):
+                current = rebalanced
+                current_cost = reb_cost
+                if reb_cost < best_cost - 1e-9:
+                    best = deepcopy_routes(rebalanced)
+                    best_cost = reb_cost
 
         sa.cool()
 
-        if improved_best:
-            no_improve_iters = 0
-        else:
-            no_improve_iters += 1
-            if no_improve_iters >= MAX_NO_IMPROVE:
-                log.info(
-                    "ALNS early stop: no improvement in %d iterations (best_cost=%.2f)",
-                    no_improve_iters,
-                    best_cost,
-                )
-                break
+    # Final rebalance pass
+    best, best_cost = _rebalance_solution(
+        best, nodes, tm, groups,
+        vehicle_capacity, refill_ids, depot_id, objective,
+    )
 
+    log.info("ALNS done: %d iterations, best_cost=%.3f", it, best_cost)
     return best
-
-
-def _rebalance_longest_shortest(
-    routes,
-    nodes,
-    tm,
-    vehicle_capacity,
-    refill_ids,
-    depot_id,
-    groups,
-    objective,
-    current_cost,
-    sa,
-):
-    failed_moves = getattr(_rebalance_longest_shortest, "failed_moves", None)
-    if failed_moves is None:
-        failed_moves = set()
-        _rebalance_longest_shortest.failed_moves = failed_moves
-
-    route_durations = []
-    for idx, r in enumerate(routes):
-        if len(r) > 2:
-            dur = route_time_minutes(r, nodes, tm)
-            route_durations.append((dur, idx))
-
-    if len(route_durations) <= 1:
-        return routes, current_cost, False
-
-    longest_dur, longest_idx = max(route_durations, key=lambda x: x[0])
-    shortest_dur, shortest_idx = min(route_durations, key=lambda x: x[0])
-
-    if longest_dur - shortest_dur < 1e-3:
-        return routes, current_cost, False
-
-    longest_route = routes[longest_idx]
-
-    base_to_nodes_in_longest = {}
-    for nid in longest_route:
-        node = nodes.get(nid)
-        if not node or node.type != "park":
-            continue
-        base = nid.split("#")[0]
-        base_to_nodes_in_longest.setdefault(base, [])
-        base_to_nodes_in_longest[base].append(nid)
-
-    if not base_to_nodes_in_longest:
-        return routes, current_cost, False
-
-    candidate_bases = list(base_to_nodes_in_longest.keys())
-    candidate_bases = [
-        b for b in candidate_bases if (b, longest_idx, shortest_idx) not in failed_moves
-    ]
-    if not candidate_bases:
-        return routes, current_cost, False
-
-    best_new_routes = None
-    best_new_cost = float("inf")
-    best_base = None
-
-    for base in candidate_bases:
-        parts = base_to_nodes_in_longest[base]
-
-        move_key = (base, longest_idx, shortest_idx)
-        if move_key in failed_moves:
-            continue
-
-        cand_routes = deepcopy_routes(routes)
-
-        cand_longest = cand_routes[longest_idx]
-        cand_longest = [nid for nid in cand_longest if nid not in parts]
-        if cand_longest and cand_longest[0] != routes[longest_idx][0]:
-            cand_longest.insert(0, routes[longest_idx][0])
-        if cand_longest and cand_longest[-1] != routes[longest_idx][-1]:
-            cand_longest.append(routes[longest_idx][-1])
-        cand_routes[longest_idx] = cand_longest
-
-        cand_shortest = cand_routes[shortest_idx]
-        if len(cand_shortest) >= 2:
-            insert_pos = len(cand_shortest) - 1
-        else:
-            insert_pos = 1
-        cand_shortest[insert_pos:insert_pos] = parts
-        cand_routes[shortest_idx] = cand_shortest
-
-        cand_routes, _ = ensure_all_routes_capacity(
-            cand_routes, nodes, vehicle_capacity, refill_ids, tm, depot_id
-        )
-
-        cand_cost = objective(cand_routes)
-
-        delta_tmp = cand_cost - current_cost
-        if delta_tmp > 10 * longest_dur:
-            failed_moves.add(move_key)
-            continue
-
-        if cand_cost < best_new_cost:
-            best_new_cost = cand_cost
-            best_new_routes = cand_routes
-            best_base = base
-
-    if best_new_routes is None:
-        return routes, current_cost, False
-
-    delta = best_new_cost - current_cost
-
-    if delta <= 0 or sa.accept(delta):
-        log.info(
-            "[REBALANCE] ACCEPT base=%s | longest_idx=%d -> shortest_idx=%d | Delta=%.2f",
-            best_base,
-            longest_idx,
-            shortest_idx,
-            delta,
-        )
-        return best_new_routes, best_new_cost, True
-    else:
-        log.info(
-            "[REBALANCE] REJECT base=%s | longest_idx=%d -> shortest_idx=%d | Delta=%.2f",
-            best_base,
-            longest_idx,
-            shortest_idx,
-            delta,
-        )
-        failed_moves.add((best_base, longest_idx, shortest_idx))
-        return routes, current_cost, False
 
 
 # =========================
@@ -436,6 +427,7 @@ def destroy_shaw(
     k: int,
     groups: Dict[str, List[str]],
 ) -> Tuple[List[str], List[List[str]]]:
+    """Shaw removal (related): pick a seed, remove k geographically closest parks."""
     parks = []
     for r in routes:
         parks.extend([nid for nid in r[1:-1] if nodes[nid].type == "park"])
@@ -639,7 +631,7 @@ def repair_greedy(
                 best_overall_pos = best_pos_in_route
 
         if best_overall_route_idx == -1:
-            log.warning(f"Cannot find valid insertion spot for group {base}. Skipping.")
+            log.warning("Cannot find valid insertion spot for group %s. Skipping.", base)
             continue
 
         target_route_idx = best_overall_route_idx
