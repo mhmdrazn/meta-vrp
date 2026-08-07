@@ -55,7 +55,7 @@ function AppLogo({ className }: { className?: string }) {
             <div className="flex items-center justify-center w-8 h-8 bg-green-600 rounded-lg text-white">
                 <Leaf className="w-5 h-5" />
             </div>
-            <span>Green Fleet</span>
+            <span>Park Watering</span>
         </NavLink>
     );
 }
@@ -215,7 +215,6 @@ function AppNav({ isCollapsed }: { isCollapsed: boolean }) {
 export default function AppShell() {
     const [open, setOpen] = useState(false);
     const { isSidebarCollapsed } = useUI();
-    const { pathname } = useLocation();
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -252,29 +251,6 @@ export default function AppShell() {
                         <div className="hidden md:flex items-center gap-2">
                             <AppLogo />
                         </div>
-
-                        {DEMO_MODE && (
-                            <nav className="hidden md:flex items-center gap-1 ml-6">
-                                {navLinks.map((link) => {
-                                    const isActive = pathname === link.to;
-                                    return (
-                                        <NavLink
-                                            key={link.to}
-                                            to={link.to}
-                                            className={cn(
-                                                "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors",
-                                                isActive
-                                                    ? "bg-primary text-primary-foreground font-medium"
-                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                            )}
-                                        >
-                                            <link.icon className="h-4 w-4" />
-                                            {link.label}
-                                        </NavLink>
-                                    );
-                                })}
-                            </nav>
-                        )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -283,32 +259,24 @@ export default function AppShell() {
                 </div>
             </header>
 
-            {/* Demo mode: sidebar hidden (only Optimize page shipped). Operational mode
-                still exposes it via the mobile Sheet in the header. */}
             <div
                 className={cn(
                     "container mx-auto flex-1 grid gap-4 px-4 py-4 overflow-hidden",
-                    DEMO_MODE
-                        ? "grid-cols-1"
-                        : cn(
-                              "grid-cols-1 md:grid-cols-[220px_1fr]",
-                              "transition-[grid-template-columns] duration-300 ease-in-out",
-                              isSidebarCollapsed && "md:grid-cols-[72px_1fr]",
-                          ),
+                    "grid-cols-1 md:grid-cols-[220px_1fr]",
+                    "transition-[grid-template-columns] duration-300 ease-in-out",
+                    isSidebarCollapsed && "md:grid-cols-[72px_1fr]",
                 )}
             >
-                {!DEMO_MODE && (
-                    <aside
-                        className={cn(
-                            "hidden md:block h-full overflow-y-auto overflow-x-hidden app-scroll",
-                            "bg-background/80 backdrop-blur",
-                        )}
-                    >
-                        <div className="sticky top-16">
-                            <AppNav isCollapsed={isSidebarCollapsed} />
-                        </div>
-                    </aside>
-                )}
+                <aside
+                    className={cn(
+                        "hidden md:block h-full overflow-y-auto overflow-x-hidden app-scroll",
+                        "bg-background/80 backdrop-blur",
+                    )}
+                >
+                    <div className="sticky top-16">
+                        <AppNav isCollapsed={isSidebarCollapsed} />
+                    </div>
+                </aside>
 
                 <main className="h-full overflow-y-auto rounded-2xl border bg-gradient-to-br from-card via-card to-primary/[0.02] app-scroll shadow-sm">
                     <div className="p-5 md:p-8">
