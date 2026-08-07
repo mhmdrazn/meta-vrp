@@ -5,13 +5,16 @@ import hashlib
 import math
 import random
 from collections import deque
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import numpy as np
 
 from .data import Node, TimeMatrix
 
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
+    np.random.seed(seed)
 
 
 def deepcopy_routes(routes: List[List[str]]) -> List[List[str]]:
@@ -24,17 +27,18 @@ def hash_routes(routes: List[List[str]]) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
-def weighted_choice(weights: List[float]) -> int:
-    """Roulette-wheel selection; return index berdasarkan bobot."""
+def weighted_choice(weights: List[float], rng: Optional[random.Random] = None) -> int:
+    """Roulette-wheel selection; return index berdasarkan bobot (notebook pick style)."""
+    r_fn = rng.random if rng else random.random
+    r_range = rng.randrange if rng else random.randrange
     total = sum(weights)
     if total <= 0:
-        # fallback: seragam
-        return random.randrange(len(weights))
-    r = random.uniform(0, total)
+        return r_range(len(weights))
+    r = r_fn() * total
     acc = 0.0
     for i, w in enumerate(weights):
         acc += w
-        if r <= acc:
+        if acc >= r:
             return i
     return len(weights) - 1
 
@@ -47,12 +51,12 @@ class SimulatedAnnealing:
         self.alpha = alpha
         self.Tmin = Tmin
 
-    def accept(self, delta: float) -> bool:
-        # delta > 0 adalah perburukan
+    def accept(self, delta: float, rng: Optional[random.Random] = None) -> bool:
         if self.T <= 1e-12:
             return False
         prob = math.exp(-delta / max(self.T, 1e-12))
-        return random.random() < prob
+        r = rng.random() if rng else random.random()
+        return r < prob
 
     def cool(self) -> None:
         self.T = max(self.Tmin, self.T * self.alpha)

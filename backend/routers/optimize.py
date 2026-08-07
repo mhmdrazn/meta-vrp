@@ -100,6 +100,7 @@ def _run_solve(req: OptimizeRequest) -> OptimizeResponse:
         diagnostics=diagnostics,
         job_id=None,  # demo mode never persists; job_id is always None.
         # New unified metrics.
+        fitness=result.get("fitness", 0.0),
         total_time=result["total_time"],
         makespan=result["makespan"],
         route_time_std=result["route_time_std"],
@@ -251,6 +252,8 @@ def get_experiments(
     all_rows: List[Dict[str, Any]] = []
     for fname in sorted(os.listdir(exp_dir)):
         if not fname.startswith(f"{experiment_type}_") or not fname.endswith(".csv"):
+            continue
+        if fname.endswith("_summary.csv") or fname.endswith("_comparison.csv"):
             continue
         fpath = os.path.join(exp_dir, fname)
         try:

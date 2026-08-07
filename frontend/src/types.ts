@@ -15,6 +15,7 @@ export interface OptimizeResponse {
   routes: OptimizeRoute[]
   diagnostics?: Record<string, unknown>
   // New unified metrics (TASK 1) — all present in backend response, safe to expect.
+  fitness?: number
   total_time?: number
   makespan?: number
   route_time_std?: number

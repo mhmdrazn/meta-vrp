@@ -1127,7 +1127,13 @@ export default function OptimizePage() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-4">
+                                    <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg space-y-1">
+                                        <p className="text-xs text-primary font-medium">Fitness Value</p>
+                                        <p className="text-xl font-bold text-primary">
+                                            {data.fitness?.toFixed(2) ?? "-"}
+                                        </p>
+                                    </div>
                                     <div className="p-3 bg-muted/50 rounded-lg space-y-1">
                                         <p className="text-xs text-muted-foreground">Makespan</p>
                                         <p className="text-lg font-semibold">

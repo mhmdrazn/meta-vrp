@@ -73,8 +73,8 @@ class HybridConfig:
     react: float = 0.1
 
     # pheromone params (from notebook)
-    alpha: float = 3.0          # pheromone exponent for aco-guided repair
-    beta: float = 1.0           # heuristic exponent for aco-guided repair
+    alpha: float = 1.0          # pheromone exponent for aco-guided repair
+    beta: float = 2.0           # heuristic exponent for aco-guided repair
     rho: float = 0.1            # base evaporation rate (actual rate = rho * 0.01)
     deposit_multiplier: float = 100.0  # pheromone deposit = multiplier / cost
 
@@ -97,8 +97,9 @@ def repair_aco_guided(
     ctx: dict,
     groups: Optional[Dict[str, List[str]]],
     pher: Dict[Tuple[str, str], float],
-    alpha: float = 3.0,
-    beta: float = 1.0,
+    alpha: float = 1.0,
+    beta: float = 2.0,
+    rng: Optional[random.Random] = None,
 ) -> List[List[str]]:
     """Re-insert removed parks using pheromone-guided truck selection.
 
@@ -193,7 +194,8 @@ def repair_aco_guided(
                 nodes[nid].demand_liters for nid in current[r] if nodes.get(nid) and nodes[nid].type == "park"
             ))
         else:
-            r_val = random.random() * tot
+            r_fn = rng.random if rng else random.random
+            r_val = r_fn() * tot
             acc = 0.0
             target_ri = len(current) - 1
             for i, w in enumerate(weights):
@@ -285,6 +287,8 @@ def hybrid_optimize(
     best = deepcopy_routes(current)
     best_cost = init_cost
 
+    rng = random.Random(cfg.seed)
+
     # --- Phase 2: ALNS with 3 repair operators (greedy, regret, aco-guided) ---
     destroy_ops = [
         ("random_removal", destroy_random),
@@ -311,13 +315,10 @@ def hybrid_optimize(
     start = time.time()
     it = 0
 
-    def time_ok():
-        return time.time() - start < cfg.time_limit_sec
-
-    def iter_ok():
+    def should_continue() -> bool:
         if cfg.max_iter is not None:
             return it < cfg.max_iter
-        return True
+        return time.time() - start < cfg.time_limit_sec
 
     ctx = {
         "vehicle_capacity": vehicle_capacity,
@@ -326,13 +327,13 @@ def hybrid_optimize(
         "depot_id": depot_id,
     }
 
-    while time_ok() and iter_ok():
+    while should_continue():
         it += 1
 
-        di = weighted_choice(d_weights)
-        ri_ = weighted_choice(r_weights)
+        di = weighted_choice(d_weights, rng)
+        ri_ = weighted_choice(r_weights, rng)
 
-        k_remove = random.randint(cfg.k_remove_min, cfg.k_remove_max)
+        k_remove = rng.randint(cfg.k_remove_min, cfg.k_remove_max)
 
         # --- DESTROY ---
         d_name, d_op = destroy_ops[di]
@@ -349,7 +350,7 @@ def hybrid_optimize(
         else:  # "aco"
             new_routes = repair_aco_guided(
                 partial, removed, nodes, tm, ctx, groups,
-                pher, cfg.alpha, cfg.beta,
+                pher, cfg.alpha, cfg.beta, rng=rng,
             )
 
         new_routes, _ = ensure_all_routes_capacity(

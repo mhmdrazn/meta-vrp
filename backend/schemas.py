@@ -42,6 +42,7 @@ class OptimizeResponse(BaseModel):
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     job_id: Optional[str] = None
     # --- new metric fields (additive — matches SolveResult) ---
+    fitness: float = 0.0
     total_time: float = 0.0
     makespan: float = 0.0
     route_time_std: float = 0.0

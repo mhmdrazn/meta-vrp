@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 import time
 from typing import Dict, List, Literal, Optional, Tuple
 
@@ -30,16 +31,20 @@ from .data import Node, TimeMatrix
 from .evaluation import (
     count_active_vehicles,
     count_refill_visits,
+    evaluate_route,
     load_profile_liters,
     makespan_minutes,
     route_time_minutes,
     route_time_std,
     total_time_minutes,
 )
+from .objective import evaluate_solution, search_objective
 from .utils import (
     build_groups_from_expanded_ids,
     ensure_all_routes_capacity,
     ensure_groups_single_vehicle,
+    set_seed,
+    weighted_choice,
 )
 from .validators import is_feasible
 
@@ -243,6 +248,71 @@ def split_route_into_k_by_load(
     return segments
 
 
+def _rebalance_solution_dmap(
+    dmap: Dict[int, Dict[str, float]],
+    num_trucks: int,
+    nodes: Dict[str, Node],
+    tm: TimeMatrix,
+    depot_id: str,
+    refill_ids: List[str],
+    vehicle_capacity: float,
+    max_passes: int = 10,
+) -> Tuple[List[List[str]], Dict[int, Dict[str, float]]]:
+    from .evaluation import evaluate_route, rebuild_route_with_refills, rebuild_routes_from_dmap
+
+    park_ids = [nid for nid, n in nodes.items() if n.type == "park"]
+    current = {ri: dict(dmap[ri]) for ri in range(num_trucks)}
+    for _ in range(max_passes):
+        routes = rebuild_routes_from_dmap(current, num_trucks, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+        times = [
+            evaluate_route(routes[ri], nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=current[ri])[0]
+            if len(routes[ri]) > 2
+            else 0.0
+            for ri in range(num_trucks)
+        ]
+        heaviest_idx = max(range(num_trucks), key=lambda i: times[i])
+        lightest_idx = min(range(num_trucks), key=lambda i: times[i])
+        gap = times[heaviest_idx] - times[lightest_idx]
+        mean_t = sum(times) / max(1, sum(1 for t in times if t > 0))
+        if mean_t < 1.0 or gap < mean_t * 0.15:
+            break
+        heavy_parks = sorted(
+            [nd for nd in park_ids if current[heaviest_idx].get(nd, 0.0) > 0.1],
+            key=lambda nd: current[heaviest_idx][nd],
+            reverse=True,
+        )
+        if not heavy_parks:
+            break
+        moved = False
+        for nd in heavy_parks:
+            amt = current[heaviest_idx][nd]
+            for frac in [1.0, 0.5]:
+                partial = amt * frac
+                if partial < 1.0:
+                    continue
+                tmp_heavy = dict(current[heaviest_idx])
+                tmp_heavy[nd] -= partial
+                if tmp_heavy[nd] <= 0.1:
+                    tmp_heavy.pop(nd, None)
+                tmp_light = dict(current[lightest_idx])
+                tmp_light[nd] = tmp_light.get(nd, 0.0) + partial
+                r_h = rebuild_route_with_refills([x for x in park_ids if tmp_heavy.get(x, 0.0) > 0.1], tmp_heavy, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                r_l = rebuild_route_with_refills([x for x in park_ids if tmp_light.get(x, 0.0) > 0.1], tmp_light, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                t_h, f_h, _ = evaluate_route(r_h, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp_heavy)
+                t_l, f_l, _ = evaluate_route(r_l, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp_light)
+                if f_h and f_l and (max(t_h, t_l) < times[heaviest_idx]):
+                    current[heaviest_idx] = tmp_heavy
+                    current[lightest_idx] = tmp_light
+                    moved = True
+                    break
+            if moved:
+                break
+        if not moved:
+            break
+    sol = rebuild_routes_from_dmap(current, num_trucks, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+    return sol, current
+
+
 # ---------------------------------------------------------------------------
 # Universal solve() entry point
 # ---------------------------------------------------------------------------
@@ -294,6 +364,401 @@ def solve(
             raise ValueError(f"{nid} is not type=park")
 
     # 2) Split-delivery expansion (if any park's demand > vehicle capacity)
+    is_original_parks = all(nid in nodes and getattr(nodes[nid], "type", None) == "park" for nid in selected_raw)
+
+    if is_original_parks:
+        # Use notebook-aligned delivery-map optimization (cell 30, 31, 34-37)
+        # Guarantees exact apple-to-apple fitness comparison with notebook baseline CSV
+        from .construct import build_initial_solution, repair_empty_trucks
+        from .evaluation import rebuild_route_with_refills, rebuild_routes_from_dmap
+
+        sol, dmap = build_initial_solution(num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity, seed=seed)
+        sol, dmap = repair_empty_trucks(sol, dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+
+        park_ids = [nid for nid, n in nodes.items() if n.type == "park"]
+        refill_set = set(refill_ids)
+        park_set = set(park_ids)
+
+        if algorithm == "alns_standard":
+            max_iter = alns_cfg.max_iter if (alns_cfg and alns_cfg.max_iter) else 200
+            # Run ALNS on delivery_map
+            rng = random.Random(seed)
+            set_seed(seed)
+
+            cur_dmap = {ri: dict(dmap[ri]) for ri in range(num_vehicles)}
+            cur_fit = evaluate_solution(rebuild_routes_from_dmap(cur_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, delivery_map=cur_dmap)[0]
+            best_dmap = dict(cur_dmap)
+            best_fit = cur_fit
+
+            from .algorithms.alns import destroy_random, destroy_worst, destroy_shaw
+            destroys = [destroy_random, destroy_worst, destroy_shaw]
+            dw = [1.0] * len(destroys)
+            rw = [1.0, 1.0]
+            ds = [0.0] * len(destroys)
+            rs = [0.0] * 2
+            dc = [0] * len(destroys)
+            rc = [0] * 2
+            T = 100.0
+
+            for it in range(max_iter):
+                di = weighted_choice(dw, rng)
+                ri_ = weighted_choice(rw, rng)
+                k = rng.randint(1, max(2, len(park_ids) // 4))
+
+                # destroy
+                d_dmap = {ri: dict(cur_dmap[ri]) for ri in range(num_vehicles)}
+                asg = [(ri, nd) for ri in range(num_vehicles) for nd in park_ids if d_dmap[ri].get(nd, 0) > 0.1]
+                removed = []
+                if di == 0:
+                    for ri, nd in rng.sample(asg, min(k, len(asg))):
+                        amt = d_dmap[ri].pop(nd, 0)
+                        if amt > 0.1: removed.append((nd, amt))
+                elif di == 1:
+                    costs = []
+                    for ri in range(num_vehicles):
+                        base = evaluate_route(rebuild_route_with_refills([x for x in park_ids if d_dmap[ri].get(x, 0) > 0.1], d_dmap[ri], nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=d_dmap[ri])[0]
+                        for nd in list(d_dmap[ri].keys()):
+                            tmp = dict(d_dmap[ri]); tmp.pop(nd, None)
+                            t2 = evaluate_route(rebuild_route_with_refills([x for x in park_ids if tmp.get(x, 0) > 0.1], tmp, nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)[0]
+                            costs.append((base - t2, ri, nd))
+                    costs.sort(reverse=True)
+                    for _, ri, nd in costs[:min(k, len(costs))]:
+                        amt = d_dmap[ri].pop(nd, 0)
+                        if amt > 0.1: removed.append((nd, amt))
+                else:
+                    if asg:
+                        seed_ri, seed_nd = rng.choice(asg)
+                        ranked = sorted(asg, key=lambda x: tm.travel(seed_nd, x[1]))
+                        for ri, nd in ranked[:min(k, len(ranked))]:
+                            amt = d_dmap[ri].pop(nd, 0)
+                            if amt > 0.1: removed.append((nd, amt))
+
+                if not removed:
+                    continue
+
+                # repair
+                new_dmap = {ri: dict(d_dmap[ri]) for ri in range(num_vehicles)}
+                for nd, amt in removed:
+                    best_ri, best_t = None, float("inf")
+                    for ri in range(num_vehicles):
+                        tmp = dict(new_dmap[ri]); tmp[nd] = tmp.get(nd, 0) + amt
+                        seq = [x for x in park_ids if tmp.get(x, 0) > 0.1]
+                        t, feas, _ = evaluate_route(rebuild_route_with_refills(seq, tmp, nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)
+                        if feas and t < best_t:
+                            best_t, best_ri = t, ri
+                    if best_ri is None:
+                        best_ri = min(range(num_vehicles), key=lambda r: sum(new_dmap[r].values()))
+                    new_dmap[best_ri][nd] = new_dmap[best_ri].get(nd, 0) + amt
+
+                new_sol = rebuild_routes_from_dmap(new_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                new_sol, new_dmap = repair_empty_trucks(new_sol, new_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                new_fit = evaluate_solution(new_sol, nodes, tm, delivery_map=new_dmap)[0]
+
+                score = 0.0
+                if new_fit < best_fit - 1e-6:
+                    best_fit = new_fit; best_dmap = dict(new_dmap)
+                    cur_dmap, cur_fit = new_dmap, new_fit; score = 3.0
+                elif new_fit < cur_fit - 1e-6:
+                    cur_dmap, cur_fit = new_dmap, new_fit; score = 2.0
+                elif rng.random() < np.exp(-(new_fit - cur_fit) / max(T, 1e-6)):
+                    cur_dmap, cur_fit = new_dmap, new_fit; score = 1.0
+
+                T = max(T * 0.995, 1e-3)
+
+            routes = rebuild_routes_from_dmap(best_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+            final_dmap = best_dmap
+
+        elif algorithm == "aco":
+            max_iter = aco_cfg.max_iter if (aco_cfg and aco_cfg.max_iter) else 200
+            alpha = aco_cfg.alpha if aco_cfg else 1.0
+            beta = aco_cfg.beta if aco_cfg else 2.0
+            rho = aco_cfg.rho if aco_cfg else 0.1
+
+            rng = random.Random(seed)
+            set_seed(seed)
+            all_nids = list(nodes.keys())
+            node_to_idx = {nid: i for i, nid in enumerate(all_nids)}
+            N = len(nodes)
+            pher = np.ones((N, N))
+
+            total_demand = sum(nodes[nd].demand_liters for nd in park_ids)
+            demand_budget = total_demand / num_vehicles * 1.15
+            best_sol, best_dmap, best_fit = None, None, float("inf")
+
+            refills_available = refill_ids if refill_ids else [nid for nid, n in nodes.items() if n.type == "refill"]
+            init_r = min(refills_available, key=lambda r: tm.travel(depot_id, r)) if refills_available else depot_id
+            init_overhead = tm.travel(depot_id, init_r) + 5.0
+
+            for it in range(max_iter):
+                iter_best_fit = float("inf"); iter_best = None
+                for _ in range(20):
+                    park_list = list(park_ids); rng.shuffle(park_list)
+                    remaining = {nd: float(nodes[nd].demand_liters) for nd in park_list}
+                    dmap_a = {ri: {} for ri in range(num_vehicles)}
+                    for tid in range(num_vehicles):
+                        cur_t = init_overhead; load = float(vehicle_capacity)
+                        pos = depot_id; delivered_vol = 0.0
+                        while True:
+                            unmet = {nd: d for nd, d in remaining.items() if d > 0.1}
+                            if not unmet: break
+                            cands = []
+                            for nd, dem in unmet.items():
+                                dv = min(load, dem)
+                                if dv <= 0: continue
+                                ft = cur_t + tm.travel(pos, nd) + 20.0 * (dv / vehicle_capacity)
+                                if ft + tm.travel(nd, depot_id) <= 540.0: cands.append(nd)
+                            if not cands:
+                                if load >= vehicle_capacity - 0.1: break
+                                if not refills_available: break
+                                nr = min(refills_available, key=lambda r: tm.travel(pos, r))
+                                tr = tm.travel(pos, nr)
+                                if cur_t + tr + 5.0 + tm.travel(nr, depot_id) > 540.0: break
+                                cur_t += tr + 5.0; load = float(vehicle_capacity); pos = nr
+                                continue
+                            weights_a = []
+                            for nd in cands:
+                                p_i, n_i = node_to_idx[pos], node_to_idx[nd]
+                                tau = (pher[p_i][n_i]) ** alpha
+                                eta = (1.0 / (tm.travel(pos, nd) + 1e-6)) ** beta
+                                weights_a.append(tau * eta)
+                            tot = sum(weights_a)
+                            if tot <= 0: nd = rng.choice(cands)
+                            else:
+                                r_val = rng.random() * tot; acc = 0.0; nd = cands[-1]
+                                for c, w in zip(cands, weights_a):
+                                    acc += w
+                                    if acc >= r_val: nd = c; break
+                            dv = min(load, remaining[nd], demand_budget - delivered_vol)
+                            if dv <= 0: break
+                            dmap_a[tid][nd] = dmap_a[tid].get(nd, 0.0) + dv
+                            remaining[nd] -= dv; delivered_vol += dv; load -= dv
+                            cur_t += tm.travel(pos, nd) + 20.0 * (dv / vehicle_capacity); pos = nd
+                            if load < 1.0 and refills_available:
+                                nr = min(refills_available, key=lambda r: tm.travel(pos, r))
+                                tr = tm.travel(pos, nr)
+                                if cur_t + tr + 5.0 + tm.travel(nr, depot_id) <= 540.0:
+                                    cur_t += tr + 5.0; load = float(vehicle_capacity); pos = nr
+
+                    leftover = {nd: d for nd, d in remaining.items() if d > 0.1}
+                    if leftover:
+                        for nd, d in list(leftover.items()):
+                            if d <= 0.1: continue
+                            order = sorted(range(num_vehicles), key=lambda ri: sum(dmap_a[ri].values()))
+                            for ri in order:
+                                if d <= 0.1: break
+                                tmp = dict(dmap_a[ri]); tmp[nd] = tmp.get(nd, 0.0) + d
+                                seq = [x for x in park_ids if tmp.get(x, 0.0) > 0.1]
+                                route = rebuild_route_with_refills(seq, tmp, nodes, tm, depot_id, refills_available, vehicle_capacity)
+                                t, feas, _ = evaluate_route(route, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)
+                                if feas:
+                                    dmap_a[ri][nd] = dmap_a[ri].get(nd, 0.0) + d
+                                    d = 0.0
+                                else:
+                                    partial = d / 2
+                                    while partial > 0.1:
+                                        tmp2 = dict(dmap_a[ri]); tmp2[nd] = tmp2.get(nd, 0.0) + partial
+                                        seq2 = [x for x in park_ids if tmp2.get(x, 0.0) > 0.1]
+                                        route2 = rebuild_route_with_refills(seq2, tmp2, nodes, tm, depot_id, refills_available, vehicle_capacity)
+                                        t2, feas2, _ = evaluate_route(route2, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp2)
+                                        if feas2:
+                                            dmap_a[ri][nd] = dmap_a[ri].get(nd, 0.0) + partial
+                                            d -= partial
+                                            break
+                                        partial /= 2
+                            if d > 0.1:
+                                lightest = min(range(num_vehicles), key=lambda ri: sum(dmap_a[ri].values()))
+                                dmap_a[lightest][nd] = dmap_a[lightest].get(nd, 0.0) + d
+
+                    sol_a = rebuild_routes_from_dmap(dmap_a, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                    sol_a, dmap_a = repair_empty_trucks(sol_a, dmap_a, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                    fit_val, _ = evaluate_solution(sol_a, nodes, tm, delivery_map=dmap_a)
+                    if fit_val < iter_best_fit:
+                        iter_best_fit = fit_val; iter_best = (sol_a, dmap_a)
+
+                if iter_best_fit < best_fit:
+                    best_fit = iter_best_fit
+                    best_sol = [r[:] for r in iter_best[0]]
+                    best_dmap = {ri: dict(iter_best[1][ri]) for ri in range(num_vehicles)}
+
+                pher *= (1.0 - rho)
+                for fit_s, sol_s in [(iter_best_fit, iter_best[0]), (best_fit, best_sol)]:
+                    deposit = 1.0 / (fit_s + 1e-9)
+                    for route in sol_s:
+                        for a, b in zip(route[:-1], route[1:]):
+                            p_a, p_b = node_to_idx[a], node_to_idx[b]
+                            pher[p_a][p_b] += deposit; pher[p_b][p_a] += deposit
+
+            routes = best_sol
+            final_dmap = best_dmap
+
+        else:  # alns_hybrid
+            max_iter = hybrid_cfg.max_iter if (hybrid_cfg and hybrid_cfg.max_iter) else 200
+            alpha = hybrid_cfg.alpha if hybrid_cfg else 1.0
+            beta = hybrid_cfg.beta if hybrid_cfg else 2.0
+
+            rng = random.Random(seed)
+            set_seed(seed)
+            all_nids = list(nodes.keys())
+            node_to_idx = {nid: i for i, nid in enumerate(all_nids)}
+            N = len(nodes)
+            pher = np.ones((N, N))
+
+            init_fit, _ = evaluate_solution(sol, nodes, tm, delivery_map=dmap)
+            for route in sol:
+                dep_val = 100.0 / (init_fit + 1e-9)
+                for a, b in zip(route[:-1], route[1:]):
+                    p_a, p_b = node_to_idx[a], node_to_idx[b]
+                    pher[p_a][p_b] += dep_val; pher[p_b][p_a] += dep_val
+
+            cur_dmap = {ri: dict(dmap[ri]) for ri in range(num_vehicles)}
+            cur_fit = init_fit
+            best_dmap = dict(cur_dmap); best_fit = cur_fit
+
+            dw = [1.0, 1.0, 1.0]; rw = [1.0, 1.0, 1.0]
+            T = 100.0
+
+            for it in range(max_iter):
+                di = weighted_choice(dw, rng)
+                ri_ = weighted_choice(rw, rng)
+                k = rng.randint(1, max(2, len(park_ids) // 4))
+
+                d_dmap = {ri: dict(cur_dmap[ri]) for ri in range(num_vehicles)}
+                asg = [(ri, nd) for ri in range(num_vehicles) for nd in park_ids if d_dmap[ri].get(nd, 0) > 0.1]
+                removed = []
+                if di == 0:
+                    for ri, nd in rng.sample(asg, min(k, len(asg))):
+                        amt = d_dmap[ri].pop(nd, 0)
+                        if amt > 0.1: removed.append((nd, amt))
+                elif di == 1:
+                    costs = []
+                    for ri in range(num_vehicles):
+                        base = evaluate_route(rebuild_route_with_refills([x for x in park_ids if d_dmap[ri].get(x, 0) > 0.1], d_dmap[ri], nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=d_dmap[ri])[0]
+                        for nd in list(d_dmap[ri].keys()):
+                            tmp = dict(d_dmap[ri]); tmp.pop(nd, None)
+                            t2 = evaluate_route(rebuild_route_with_refills([x for x in park_ids if tmp.get(x, 0) > 0.1], tmp, nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)[0]
+                            costs.append((base - t2, ri, nd))
+                    costs.sort(reverse=True)
+                    for _, ri, nd in costs[:min(k, len(costs))]:
+                        amt = d_dmap[ri].pop(nd, 0)
+                        if amt > 0.1: removed.append((nd, amt))
+                else:
+                    if asg:
+                        seed_ri, seed_nd = rng.choice(asg)
+                        ranked = sorted(asg, key=lambda x: tm.travel(seed_nd, x[1]))
+                        for ri, nd in ranked[:min(k, len(ranked))]:
+                            amt = d_dmap[ri].pop(nd, 0)
+                            if amt > 0.1: removed.append((nd, amt))
+
+                if not removed:
+                    continue
+
+                new_dmap = {ri: dict(d_dmap[ri]) for ri in range(num_vehicles)}
+                if ri_ < 2:
+                    for nd, amt in removed:
+                        best_ri, best_t = None, float("inf")
+                        for ri in range(num_vehicles):
+                            tmp = dict(new_dmap[ri]); tmp[nd] = tmp.get(nd, 0) + amt
+                            seq = [x for x in park_ids if tmp.get(x, 0) > 0.1]
+                            t, feas, _ = evaluate_route(rebuild_route_with_refills(seq, tmp, nodes, tm, depot_id, refill_ids, vehicle_capacity), nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)
+                            if feas and t < best_t:
+                                best_t, best_ri = t, ri
+                        if best_ri is None:
+                            best_ri = min(range(num_vehicles), key=lambda r: sum(new_dmap[r].values()))
+                        new_dmap[best_ri][nd] = new_dmap[best_ri].get(nd, 0) + amt
+                else:
+                    for nd, amt in removed:
+                        weights_h = []
+                        for ri in range(num_vehicles):
+                            tmp = dict(new_dmap[ri]); tmp[nd] = tmp.get(nd, 0) + amt
+                            seq = [x for x in park_ids if tmp.get(x, 0) > 0.1]
+                            r_b = rebuild_route_with_refills(seq, tmp, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                            t, feas, _ = evaluate_route(r_b, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)
+                            if not feas:
+                                weights_h.append(0.0); continue
+                            idx = r_b.index(nd) if nd in r_b else -1
+                            last = r_b[idx - 1] if idx > 0 else depot_id
+                            tau_h = (pher[node_to_idx[last]][node_to_idx[nd]]) ** alpha
+                            eta_h = (1.0 / (t + 1e-6)) ** beta
+                            weights_h.append(tau_h * eta_h)
+                        tot_h = sum(weights_h)
+                        if tot_h <= 0:
+                            target_ri = min(range(num_vehicles), key=lambda r: sum(new_dmap[r].values()))
+                        else:
+                            r_h = rng.random() * tot_h; acc_h = 0.0; target_ri = num_vehicles - 1
+                            for i, w in enumerate(weights_h):
+                                acc_h += w
+                                if acc_h >= r_h: target_ri = i; break
+                        new_dmap[target_ri][nd] = new_dmap[target_ri].get(nd, 0) + amt
+
+                new_sol = rebuild_routes_from_dmap(new_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                new_sol, new_dmap = repair_empty_trucks(new_sol, new_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                new_fit = evaluate_solution(new_sol, nodes, tm, delivery_map=new_dmap)[0]
+
+                if new_fit < best_fit - 1e-6:
+                    best_fit = new_fit; best_dmap = dict(new_dmap)
+                    cur_dmap, cur_fit = new_dmap, new_fit
+                    dep_val = 100.0 / (new_fit + 1e-9)
+                    for route in new_sol:
+                        for a, b in zip(route[:-1], route[1:]):
+                            p_a, p_b = node_to_idx[a], node_to_idx[b]
+                            pher[p_a][p_b] += dep_val; pher[p_b][p_a] += dep_val
+                elif new_fit < cur_fit - 1e-6:
+                    cur_dmap, cur_fit = new_dmap, new_fit
+                elif rng.random() < np.exp(-(new_fit - cur_fit) / max(T, 1e-6)):
+                    cur_dmap, cur_fit = new_dmap, new_fit
+
+                T = max(T * 0.995, 1e-3)
+
+            routes = rebuild_routes_from_dmap(best_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+            final_dmap = best_dmap
+
+        # Rebalance
+        routes, final_dmap = _rebalance_solution_dmap(final_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+
+        obj_fitness, feasible = evaluate_solution(routes, nodes, tm, delivery_map=final_dmap)
+        times = [evaluate_route(r, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=final_dmap[ri])[0] for ri, r in enumerate(routes) if len(r) > 2]
+        obj_total = sum(times)
+        obj_makespan = max(times) if times else 0.0
+        obj_std = float(np.std(times)) if len(times) > 1 else 0.0
+        active = len(times)
+        refill_set = set(refill_ids)
+        refills = sum(1 for r in routes for nd in r[1:-1] if nd in refill_set)
+
+        route_results: List[dict] = []
+        for vid, r in enumerate(routes):
+            if len(r) <= 2: continue
+            route_results.append({
+                "vehicle_id": vid,
+                "sequence": r,
+                "total_time_min": evaluate_route(r, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=final_dmap[vid])[0],
+                "load_profile_liters": load_profile_liters(r, nodes, vehicle_capacity),
+            })
+
+        t_end = time.perf_counter()
+        return {
+            "routes": routes,
+            "route_results": route_results,
+            "fitness": obj_fitness,
+            "total_time": obj_total,
+            "makespan": obj_makespan,
+            "route_time_std": obj_std,
+            "active_vehicles": active,
+            "refill_visits": refills,
+            "computation_time": t_end - t0,
+            "feasible": feasible,
+            "algorithm": algorithm,
+            "seed": seed,
+            "diagnostics": {
+                "depot_id": depot_id,
+                "nodes_loaded": len(nodes),
+                "refill_count": len(refill_ids),
+                "timing_sec": {
+                    "algorithm": round(t_end - t0, 4),
+                },
+            },
+        }
+
+    # Fallback to expansion if nodes are expanded
     nodes_exp, tm_exp, selected_ids_expanded = expand_split_delivery(
         nodes, tm, selected_raw, vehicle_capacity
     )
@@ -473,6 +938,7 @@ def solve(
     )
 
     # 8) Evaluate — every metric downstream code needs
+    obj_fitness = search_objective(routes, nodes_exp, tm_exp)
     obj_makespan = makespan_minutes(routes, nodes_exp, tm_exp)
     obj_total = total_time_minutes(routes, nodes_exp, tm_exp)
     obj_std = route_time_std(routes, nodes_exp, tm_exp)
@@ -498,6 +964,7 @@ def solve(
     return {
         "routes": routes,
         "route_results": route_results,
+        "fitness": obj_fitness,
         "total_time": obj_total,
         "makespan": obj_makespan,
         "route_time_std": obj_std,

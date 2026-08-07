@@ -228,6 +228,8 @@ def alns_optimize(
         ("regret2_insert", repair_regret2),
     ]
 
+    rng = random.Random(cfg.seed)
+
     n_destroy = len(destroy_ops)
     n_repair = len(repair_ops)
 
@@ -259,26 +261,26 @@ def alns_optimize(
     start = time.time()
     it = 0
 
-    def time_ok():
-        return time.time() - start < cfg.time_limit_sec
-
-    def iter_ok():
+    def should_continue() -> bool:
         if cfg.max_iter is not None:
             return it < cfg.max_iter
-        return True
+        return time.time() - start < cfg.time_limit_sec
 
-    while time_ok() and iter_ok():
+    while should_continue():
         it += 1
 
-        di = weighted_choice(d_weights)
-        ri = weighted_choice(r_weights)
+        di = weighted_choice(d_weights, rng)
+        ri = weighted_choice(r_weights, rng)
         d_name, d_op = destroy_ops[di]
         r_name, r_op = repair_ops[ri]
 
-        k_remove = random.randint(cfg.k_remove_min, cfg.k_remove_max)
+        k_remove = rng.randint(cfg.k_remove_min, cfg.k_remove_max)
 
         # --- DESTROY ---
-        removed, partial = d_op(current, nodes, tm, k_remove, groups)
+        try:
+            removed, partial = d_op(current, nodes, tm, k_remove, groups, rng=rng)
+        except TypeError:
+            removed, partial = d_op(current, nodes, tm, k_remove, groups)
         if cfg.use_tabu_on_removed_nodes and tabu.contains_any(removed):
             continue
 
@@ -294,16 +296,29 @@ def alns_optimize(
                 refill_ids=refill_ids,
             )
         else:
-            repaired = r_op(
-                partial, removed, nodes, tm,
-                {
-                    "vehicle_capacity": vehicle_capacity,
-                    "refill_ids": refill_ids,
-                    "allow_refill": allow_refill,
-                    "depot_id": depot_id,
-                },
-                groups,
-            )
+            try:
+                repaired = r_op(
+                    partial, removed, nodes, tm,
+                    {
+                        "vehicle_capacity": vehicle_capacity,
+                        "refill_ids": refill_ids,
+                        "allow_refill": allow_refill,
+                        "depot_id": depot_id,
+                    },
+                    groups,
+                    rng=rng,
+                )
+            except TypeError:
+                repaired = r_op(
+                    partial, removed, nodes, tm,
+                    {
+                        "vehicle_capacity": vehicle_capacity,
+                        "refill_ids": refill_ids,
+                        "allow_refill": allow_refill,
+                        "depot_id": depot_id,
+                    },
+                    groups,
+                )
         repaired, _ins = ensure_all_routes_capacity(
             repaired, nodes, vehicle_capacity, refill_ids, tm, depot_id
         )
@@ -327,7 +342,11 @@ def alns_optimize(
             current = repaired
             current_cost = new_cost
             score = 2.0
-        elif sa.accept(delta):
+        elif sa.accept(delta, rng):
+            # SA-accepted (worse)
+            current = repaired
+            current_cost = new_cost
+            score = 1.0
             # SA-accepted (worse)
             current = repaired
             current_cost = new_cost
