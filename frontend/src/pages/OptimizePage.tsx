@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
     Table,
     TableBody,
@@ -427,12 +426,12 @@ export default function OptimizePage() {
                         Plan efficient watering routes for parks using available vehicles and refill facilities.
                     </p>
                 </div>
-                <div className="flex items-center gap-3 px-4 py-2.5 border rounded-xl bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+                <div className="flex items-center gap-2 px-4 py-2.5 border rounded-xl bg-primary/5 border-primary/20">
                     <ListChecks className="h-5 w-5 text-primary" />
-                    <span className="font-medium text-sm">Selected</span>
-                    <Badge variant="default" className="text-sm px-3 py-1 bg-primary shadow-sm">
+                    <span className="text-sm text-muted-foreground">Selected</span>
+                    <span className="text-sm font-semibold text-primary">
                         {parks.length} parks
-                    </Badge>
+                    </span>
                 </div>
             </div>
 
