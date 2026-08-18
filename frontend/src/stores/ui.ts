@@ -8,9 +8,6 @@ interface UIState {
     setMaxVehicles: (n: number) => void;
     selected: Set<string>;
     setSelected: (s: Set<string>) => void;
-
-    isSidebarCollapsed: boolean;
-    toggleSidebar: () => void;
 }
 
 export const useUI = create<UIState>()(
@@ -20,12 +17,6 @@ export const useUI = create<UIState>()(
             setMaxVehicles: (n) => set({ maxVehicles: n }),
             selected: new Set<string>(),
             setSelected: (s) => set({ selected: s }),
-
-            isSidebarCollapsed: false,
-            toggleSidebar: () =>
-                set((state) => ({
-                    isSidebarCollapsed: !state.isSidebarCollapsed,
-                })),
         }),
         {
             name: "meta-vrp-ui-storage",
@@ -33,7 +24,6 @@ export const useUI = create<UIState>()(
 
             partialize: (state) => ({
                 maxVehicles: state.maxVehicles,
-                isSidebarCollapsed: state.isSidebarCollapsed, // <-- TAMBAHKAN INI
             }),
         },
     ),

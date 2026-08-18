@@ -1,46 +1,7 @@
-// src/layouts/AppShell.tsx
-import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Outlet, NavLink } from "react-router-dom";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-    Menu,
-    Leaf,
-    ClipboardList,
-    Map,
-    Users,
-    History,
-    Activity,
-    PanelLeft,
-    PanelRight,
-    BarChart3,
-} from "lucide-react";
+import { Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-import { useUI } from "../stores/ui";
-
-// In demo mode (default public deployment) we only surface routes that don't depend on
-// the database. The other pages (Groups/Assign/Status/Logs/Editor) are still present in
-// the router for operational-mode use, but hidden from the demo nav.
-const DEMO_MODE = (import.meta.env.VITE_DEMO_MODE ?? "1") === "1";
-
-const ALL_NAV_LINKS = [
-    { to: "/", label: "Optimize", icon: Map, demo: true },
-    { to: "/results", label: "Results", icon: BarChart3, demo: true },
-    { to: "/groups", label: "Group Management", icon: ClipboardList, demo: false },
-    { to: "/assign", label: "Assignment", icon: Users, demo: false },
-    { to: "/status", label: "Field Status", icon: Activity, demo: false },
-    { to: "/logs", label: "History", icon: History, demo: false },
-    { to: "/editor", label: "Map Editor", icon: Leaf, demo: false },
-];
-const navLinks = DEMO_MODE ? ALL_NAV_LINKS.filter((l) => l.demo) : ALL_NAV_LINKS;
 
 function AppLogo({ className }: { className?: string }) {
     return (
@@ -60,233 +21,24 @@ function AppLogo({ className }: { className?: string }) {
     );
 }
 
-const navContainerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-        opacity: 1,
-        transition: {
-            staggerChildren: 0.06,
-        },
-    },
-};
-const navItemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    show: { opacity: 1, x: 0 },
-};
-
-function AppNav({ isCollapsed }: { isCollapsed: boolean }) {
-    const { pathname } = useLocation();
-    const { toggleSidebar } = useUI();
-
-    return (
-        <motion.nav
-            className="grid items-start gap-1.5"
-            variants={navContainerVariants}
-            initial="hidden"
-            animate="show"
-            key={isCollapsed ? "collapsed" : "expanded"}
-        >
-            {navLinks.map((link) => {
-                const isActive = pathname === link.to;
-                return (
-                    <motion.div
-                        key={link.to}
-                        variants={navItemVariants}
-                        whileHover={{ x: 3 }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 15,
-                        }}
-                    >
-                        <Tooltip delayDuration={0}>
-                            <TooltipTrigger asChild>
-                                <NavLink
-                                    to={link.to}
-                                    className={cn(
-                                        "flex items-center h-10 rounded-lg text-sm transition-colors",
-                                        isActive
-                                            ? "bg-green-600 text-white font-semibold shadow-md"
-                                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                        isCollapsed
-                                            ? "justify-center w-10"
-                                            : "px-3",
-                                    )}
-                                >
-                                    <link.icon className="h-4 w-4 flex-shrink-0" />
-
-                                    <AnimatePresence>
-                                        {!isCollapsed && (
-                                            <motion.span
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{
-                                                    opacity: 1,
-                                                    x: 0,
-                                                    transition: {
-                                                        duration: 0.2,
-                                                        delay: 0.15,
-                                                    },
-                                                }}
-                                                exit={{
-                                                    opacity: 0,
-                                                    x: -10,
-                                                    transition: {
-                                                        duration: 0.1,
-                                                    },
-                                                }}
-                                                className="whitespace-nowrap ml-3"
-                                            >
-                                                {link.label}
-                                            </motion.span>
-                                        )}
-                                    </AnimatePresence>
-                                </NavLink>
-                            </TooltipTrigger>
-                            {isCollapsed && (
-                                <TooltipContent side="right">
-                                    <p>{link.label}</p>
-                                </TooltipContent>
-                            )}
-                        </Tooltip>
-                    </motion.div>
-                );
-            })}
-
-            <motion.div
-                variants={navItemVariants}
-                whileHover={{ x: 3 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                className="mt-4 pt-4 border-t"
-            >
-                <Tooltip delayDuration={0}>
-                    <TooltipTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            onClick={toggleSidebar}
-                            className={cn(
-                                "flex items-center h-10 w-full rounded-lg text-sm transition-colors text-muted-foreground hover:bg-muted hover:text-foreground",
-                                isCollapsed ? "justify-center w-10" : "px-3",
-                            )}
-                        >
-                            {isCollapsed ? (
-                                <PanelRight className="h-4 w-4 flex-shrink-0" />
-                            ) : (
-                                <PanelLeft className="h-4 w-4 flex-shrink-0" />
-                            )}
-
-                            <AnimatePresence>
-                                {!isCollapsed && (
-                                    <motion.span
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{
-                                            opacity: 1,
-                                            x: 0,
-                                            transition: {
-                                                duration: 0.2,
-                                                delay: 0.15,
-                                            },
-                                        }}
-                                        exit={{
-                                            opacity: 0,
-                                            x: -10,
-                                            transition: { duration: 0.1 },
-                                        }}
-                                        className="whitespace-nowrap ml-3"
-                                    >
-                                        Collapse
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                        </Button>
-                    </TooltipTrigger>
-                    {isCollapsed && (
-                        <TooltipContent side="right">
-                            <p>Expand sidebar</p>
-                        </TooltipContent>
-                    )}
-                </Tooltip>
-            </motion.div>
-        </motion.nav>
-    );
-}
-
 export default function AppShell() {
-    const [open, setOpen] = useState(false);
-    const { isSidebarCollapsed } = useUI();
-
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
             <header className="z-50 border-b border-primary/10 bg-gradient-to-r from-primary/5 via-background to-primary/5 backdrop-blur-xl flex-shrink-0">
-                <div className="container mx-auto flex h-16 items-center justify-between px-4">
-                    <div className="flex items-center gap-2">
-                        {/* Tombol Menu Mobile */}
-                        <Sheet open={open} onOpenChange={setOpen}>
-                            <SheetTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="md:hidden"
-                                >
-                                    <Menu className="h-5 w-5" />
-                                    <span className="sr-only">Open menu</span>
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent
-                                side="left"
-                                className="flex flex-col p-0 w-64"
-                            >
-                                <div className="p-4 border-b">
-                                    <AppLogo />
-                                </div>
-                                {/* hilangin scroll horizontal di mobile sidebar */}
-                                <div className="p-4 overflow-y-auto overflow-x-hidden app-scroll">
-                                    <AppNav isCollapsed={false} />
-                                </div>
-                            </SheetContent>
-                        </Sheet>
-
-                        {/* Logo Desktop */}
-                        <div className="hidden md:flex items-center gap-2">
-                            <AppLogo />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <ThemeToggle />
-                    </div>
+                <div className="container mx-auto flex h-14 items-center justify-between px-4">
+                    <AppLogo />
+                    <ThemeToggle />
                 </div>
             </header>
 
-            <div
-                className={cn(
-                    "container mx-auto flex-1 grid gap-4 px-4 py-4 overflow-hidden",
-                    "grid-cols-1 md:grid-cols-[220px_1fr]",
-                    "transition-[grid-template-columns] duration-300 ease-in-out",
-                    isSidebarCollapsed && "md:grid-cols-[72px_1fr]",
-                )}
-            >
-                <aside
-                    className={cn(
-                        "hidden md:block h-full overflow-y-auto overflow-x-hidden app-scroll",
-                        "bg-background/80 backdrop-blur",
-                    )}
-                >
-                    <div className="sticky top-16">
-                        <AppNav isCollapsed={isSidebarCollapsed} />
-                    </div>
-                </aside>
-
-                <main className="h-full overflow-y-auto rounded-2xl border bg-gradient-to-br from-card via-card to-primary/[0.02] app-scroll shadow-sm">
-                    <div className="p-5 md:p-8">
-                        <Outlet />
-                    </div>
-                </main>
-            </div>
+            <main className="flex-1 overflow-y-auto app-scroll">
+                <div className="container mx-auto px-4 py-4">
+                    <Outlet />
+                </div>
+            </main>
 
             <footer className="flex-shrink-0 border-t border-primary/10 bg-gradient-to-r from-transparent via-primary/[0.02] to-transparent">
-                <div className="container mx-auto flex h-12 items-center justify-center px-4">
+                <div className="container mx-auto flex h-10 items-center justify-center px-4">
                     <p className="text-xs text-muted-foreground">
                         © {new Date().getFullYear()} MetaVRP Project • Park-Watering
                         Routing Decision-Support System
