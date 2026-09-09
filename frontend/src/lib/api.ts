@@ -3,7 +3,15 @@ import type { Operator, Vehicle } from '../types'
 import type { LogsPage } from '../types'
 import type { HistoryItem } from '../types'
 import type { JobDetail, JobVehicle, JobRoute, JobRouteStep } from '../types'
-import type { OptimizeResponse, LogEntry, Group, Assignment, RouteStatus, Node, Dataset } from '../types'
+import type {
+  OptimizeResponse,
+  LogEntry,
+  Group,
+  Assignment,
+  RouteStatus,
+  Node,
+  Dataset,
+} from '../types'
 import type { Geometry } from 'geojson'
 
 export interface OptimizePayload {
@@ -187,107 +195,84 @@ export const Api = {
     }
     return []
   },
-    getJobDetail: async (job_id: string): Promise<JobDetail> => {
-  // Ambil summary + katalog kendaraan & operator sekaligus
-  const [summary, vehiclesCatalog, operatorsCatalog] = await Promise.all([
-    api.get<any>(`/jobs/${job_id}/summary`).then((r) => r.data),
-    Api.listVehicles(),
-    Api.listOperators(),
-  ])
+  getJobDetail: async (job_id: string): Promise<JobDetail> => {
+    // Ambil summary + katalog kendaraan & operator sekaligus
+    const [summary, vehiclesCatalog, operatorsCatalog] = await Promise.all([
+      api.get<any>(`/jobs/${job_id}/summary`).then((r) => r.data),
+      Api.listVehicles(),
+      Api.listOperators(),
+    ])
 
-  const jobId = String(summary.job?.job_id ?? job_id)
-  const created = String(summary.job?.created_at ?? '')
-  const status = String(summary.job?.status ?? 'planned')
+    const jobId = String(summary.job?.job_id ?? job_id)
+    const created = String(summary.job?.created_at ?? '')
+    const status = String(summary.job?.status ?? 'planned')
 
-  let vehicles: JobVehicle[] = []
+    let vehicles: JobVehicle[] = []
 
-  if (Array.isArray(summary.vehicles)) {
-    vehicles = summary.vehicles.map((v: any) => {
-      const assignedVehicleId = v.assigned_vehicle_id
-        ? String(v.assigned_vehicle_id)
-        : null
-      const assignedOperatorId = v.assigned_operator_id
-        ? String(v.assigned_operator_id)
-        : null
+    if (Array.isArray(summary.vehicles)) {
+      vehicles = summary.vehicles.map((v: any) => {
+        const assignedVehicleId = v.assigned_vehicle_id ? String(v.assigned_vehicle_id) : null
+        const assignedOperatorId = v.assigned_operator_id ? String(v.assigned_operator_id) : null
 
-      const vehCat = assignedVehicleId
-        ? vehiclesCatalog.find((vc) => vc.id === assignedVehicleId)
-        : undefined
+        const vehCat = assignedVehicleId
+          ? vehiclesCatalog.find((vc) => vc.id === assignedVehicleId)
+          : undefined
 
-      const opCat = assignedOperatorId
-        ? operatorsCatalog.find((oc) => oc.id === assignedOperatorId)
-        : undefined
+        const opCat = assignedOperatorId
+          ? operatorsCatalog.find((oc) => oc.id === assignedOperatorId)
+          : undefined
 
-      return {
-        vehicle_id: v.vehicle_id ?? v.id,
-        // plate: ambil dari summary kalau suatu hari backend kirim,
-        // kalau nggak ada, fallback ke katalog kendaraan
-        plate: v.plate ?? v.license_plate ?? v.nopol ?? vehCat?.plate,
-        operator: opCat
-          ? {
-              id: opCat.id,
-              name: opCat.name,
-            }
-          : undefined,
-        status: v.status,
-        route_total_time_min: v.route_total_time_min,
-        assigned_vehicle_id: assignedVehicleId,
-        assigned_operator_id: assignedOperatorId,
-        route: Array.isArray(v.route) ? (v.route as JobRouteStep[]) : undefined,
-      } as JobVehicle
-    })
-  }
+        return {
+          vehicle_id: v.vehicle_id ?? v.id,
+          // plate: ambil dari summary kalau suatu hari backend kirim,
+          // kalau nggak ada, fallback ke katalog kendaraan
+          plate: v.plate ?? v.license_plate ?? v.nopol ?? vehCat?.plate,
+          operator: opCat
+            ? {
+                id: opCat.id,
+                name: opCat.name,
+              }
+            : undefined,
+          status: v.status,
+          route_total_time_min: v.route_total_time_min,
+          assigned_vehicle_id: assignedVehicleId,
+          assigned_operator_id: assignedOperatorId,
+          route: Array.isArray(v.route) ? (v.route as JobRouteStep[]) : undefined,
+        } as JobVehicle
+      })
+    }
 
-  const routes: JobRoute[] = vehicles
-    .filter((v) => Array.isArray(v.route) && v.route.length > 0)
-    .map((v) => ({
-      vehicle_id: v.vehicle_id,
-      sequence: (v.route as JobRouteStep[])
-        .sort((a, b) => a.sequence_index - b.sequence_index)
-        .map((step) => step.node_id),
-      total_time_min: v.route_total_time_min,
-    }))
-
-  return { job_id: jobId, created_at: created, status, vehicles, routes }
-},
-
-
-    listOperators: async (): Promise<Operator[]> => {
-      const raw = await getJSON<any[]>('/catalog/operators', { active: true })
-      return (raw ?? []).map((o) => ({
-        id: String(o.operator_id ?? o.id ?? ''),
-        name: String(o.name ?? ''),
-        phone: o.phone ? String(o.phone) : undefined,
-        active: Boolean(o.active ?? true),
-        createdAt: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
+    const routes: JobRoute[] = vehicles
+      .filter((v) => Array.isArray(v.route) && v.route.length > 0)
+      .map((v) => ({
+        vehicle_id: v.vehicle_id,
+        sequence: (v.route as JobRouteStep[])
+          .sort((a, b) => a.sequence_index - b.sequence_index)
+          .map((step) => step.node_id),
+        total_time_min: v.route_total_time_min,
       }))
-    },
-    createOperator: (op: Pick<Operator, 'name' | 'phone' | 'active'>): Promise<Operator> =>
-      api
-        .post('/catalog/operators', {
-          name: op.name,
-          phone: op.phone ?? null,
-          active: op.active ?? true,
-        })
-        .then((r) => {
-          const o = r.data
-          return {
-            id: String(o.operator_id ?? o.id ?? ''),
-            name: String(o.name ?? ''),
-            phone: o.phone ? String(o.phone) : undefined,
-            active: Boolean(o.active ?? true),
-            createdAt: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
-          } as Operator
-        }),
-    updateOperator: (
-      id: string,
-      patch: Partial<Pick<Operator, 'name' | 'phone' | 'active'>>,
-    ): Promise<Operator> => {
-      const body: any = {}
-      if (typeof patch.name === 'string') body.name = patch.name
-      if (typeof patch.phone === 'string' || patch.phone === null) body.phone = patch.phone ?? null
-      if (typeof patch.active === 'boolean') body.active = patch.active
-      return api.patch(`/catalog/operators/${id}`, body).then((r) => {
+
+    return { job_id: jobId, created_at: created, status, vehicles, routes }
+  },
+
+  listOperators: async (): Promise<Operator[]> => {
+    const raw = await getJSON<any[]>('/catalog/operators', { active: true })
+    return (raw ?? []).map((o) => ({
+      id: String(o.operator_id ?? o.id ?? ''),
+      name: String(o.name ?? ''),
+      phone: o.phone ? String(o.phone) : undefined,
+      active: Boolean(o.active ?? true),
+      createdAt: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
+    }))
+  },
+  createOperator: (op: Pick<Operator, 'name' | 'phone' | 'active'>): Promise<Operator> =>
+    api
+      .post('/catalog/operators', {
+        name: op.name,
+        phone: op.phone ?? null,
+        active: op.active ?? true,
+      })
+      .then((r) => {
         const o = r.data
         return {
           id: String(o.operator_id ?? o.id ?? ''),
@@ -296,8 +281,26 @@ export const Api = {
           active: Boolean(o.active ?? true),
           createdAt: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
         } as Operator
-      })
-    },
+      }),
+  updateOperator: (
+    id: string,
+    patch: Partial<Pick<Operator, 'name' | 'phone' | 'active'>>,
+  ): Promise<Operator> => {
+    const body: any = {}
+    if (typeof patch.name === 'string') body.name = patch.name
+    if (typeof patch.phone === 'string' || patch.phone === null) body.phone = patch.phone ?? null
+    if (typeof patch.active === 'boolean') body.active = patch.active
+    return api.patch(`/catalog/operators/${id}`, body).then((r) => {
+      const o = r.data
+      return {
+        id: String(o.operator_id ?? o.id ?? ''),
+        name: String(o.name ?? ''),
+        phone: o.phone ? String(o.phone) : undefined,
+        active: Boolean(o.active ?? true),
+        createdAt: String(o.created_at ?? o.createdAt ?? new Date().toISOString()),
+      } as Operator
+    })
+  },
   deleteOperator: (id: string): Promise<true> =>
     api.delete(`/catalog/operators/${id}`).then(() => true),
   listVehicles: async (): Promise<Vehicle[]> => {
