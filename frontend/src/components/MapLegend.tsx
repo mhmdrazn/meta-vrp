@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, VEHICLE_ROUTE_COLORS } from '@/lib/utils'
 
 const ROUTE_COLORS = [
-  { color: '#1d4ed8', label: 'Blue' },
-  { color: '#c026d3', label: 'Purple' },
-  { color: '#db2777', label: 'Pink' },
-  { color: '#ea580c', label: 'Orange' },
-  { color: '#ca8a04', label: 'Yellow' },
-  { color: '#059669', label: 'Emerald' },
+  { color: VEHICLE_ROUTE_COLORS[0], label: 'Blue' },
+  { color: VEHICLE_ROUTE_COLORS[1], label: 'Purple' },
+  { color: VEHICLE_ROUTE_COLORS[2], label: 'Pink' },
+  { color: VEHICLE_ROUTE_COLORS[3], label: 'Orange' },
+  { color: VEHICLE_ROUTE_COLORS[4], label: 'Yellow' },
+  { color: VEHICLE_ROUTE_COLORS[5], label: 'Emerald' },
 ]
 
 export default function MapLegend() {

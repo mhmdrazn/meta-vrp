@@ -3,7 +3,7 @@ import { useMemo, useEffect } from 'react'
 import type { Node, OptimizeResponse } from '../types'
 import type { Geometry } from 'geojson'
 import L from 'leaflet'
-import { getDemandColor } from '../lib/utils'
+import { getDemandColor, getVehicleColor } from '../lib/utils'
 import MapLegend from './MapLegend'
 
 type Props = {
@@ -21,8 +21,6 @@ function MapAutoResize() {
   }, [map])
   return null
 }
-
-const routeColors = ['#1d4ed8', '#c026d3', '#db2777', '#ea580c', '#ca8a04', '#059669']
 
 const createIcon = (type: string, demand: number = 0, isDimmed: boolean = false) => {
   let svgContent = ''
@@ -177,8 +175,7 @@ export default function OptimizeResultMap({
           // LOGIKA BARU: Sembunyikan rute lain saat mode export
           if (showOnlyHighlighted && isDimmed) return null
 
-          const routeIndex = result.routes.findIndex((r) => r.vehicle_id === vehId)
-          const color = routeColors[routeIndex % routeColors.length]
+          const color = getVehicleColor(vehId)
 
           return geometries.map((geo, geoIdx) => (
             <GeoJSON

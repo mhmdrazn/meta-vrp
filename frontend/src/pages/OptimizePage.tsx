@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Api } from "../lib/api";
 import type { OptimizeResponse, Node, Geometry, Dataset } from "../types";
 import { minutesToHHMM } from "../lib/format";
-import { cn } from "../lib/utils";
+import { cn, getVehicleColor } from "../lib/utils";
 import NodesMapSelector from "../components/NodesMapSelector";
 import { DemoDisclaimer } from "../components/DemoDisclaimer";
 import { useDataset } from "../stores/dataset";
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
     TableBody,
@@ -70,15 +71,6 @@ import {
     Filter,
 } from "lucide-react";
 
-const ROUTE_COLORS = [
-    "#1d4ed8",
-    "#c026d3",
-    "#db2777",
-    "#ea580c",
-    "#ca8a04",
-    "#059669",
-];
-
 const PLANNING_MODES = [
     { value: 5, label: "5 s", title: "Rapid", description: "Fast response" },
     { value: 10, label: "10 s", title: "Standard", description: "Balanced" },
@@ -103,12 +95,18 @@ export default function OptimizePage() {
     const { datasetId, setDatasetId } = useDataset();
 
     const [timeLimitSec, setTimeLimitSec] = useState<number>(5);
+    const [numVehicles, setNumVehicles] = useState<number>(7);
     const [vehicleRoutes, setVehicleRoutes] = useState<Record<number, Geometry[]>>({});
     const [isFetchingRoutes, setIsFetchingRoutes] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [highlightedVehicleId, setHighlightedVehicleId] = useState<number | null>(null);
-    const [vehicleFilter, setVehicleFilter] = useState<number | null>(null);
+    const [selectedVehicleIds, setSelectedVehicleIds] = useState<Set<number>>(new Set());
     const [showAdvanced, setShowAdvanced] = useState(true);
+
+    const VEHICLE_COUNT_OPTIONS = useMemo(
+        () => Array.from({ length: 8 }, (_, i) => i + 3), // 3..10
+        [],
+    );
 
     const mapRef = useRef<HTMLDivElement>(null);
     const summaryRef = useRef<HTMLDivElement>(null);
@@ -130,7 +128,7 @@ export default function OptimizePage() {
     );
 
     const { toast } = useToast();
-    const { lastResult, setLastResult, clearLastResult } = useOptimizeMem();
+    const { lastResult, lastPayload, setLastResult, clearLastResult } = useOptimizeMem();
     const [progress, setProgress] = useState(0);
 
     const {
@@ -145,6 +143,7 @@ export default function OptimizePage() {
                 num_vehicles: variables?.num_vehicles,
                 selected_node_ids: variables?.selected_node_ids ?? [],
             });
+            setSelectedVehicleIds(new Set((res?.routes ?? []).map((r) => r.vehicle_id)));
             toast({
                 title: "Optimization Complete",
                 description: `Makespan ${res.makespan?.toFixed(2) ?? res.objective_time_min} min`,
@@ -161,7 +160,7 @@ export default function OptimizePage() {
         clearLastResult();
         setVehicleRoutes({});
         setHighlightedVehicleId(null);
-        setVehicleFilter(null);
+        setSelectedVehicleIds(new Set());
         resetOptimize();
     };
 
@@ -169,10 +168,10 @@ export default function OptimizePage() {
         const node_ids = parks.map((p) => p.id);
         setVehicleRoutes({});
         setHighlightedVehicleId(null);
-        setVehicleFilter(null);
+        setSelectedVehicleIds(new Set());
         resetOptimize();
         mutate({
-            num_vehicles: 7,
+            num_vehicles: numVehicles,
             selected_node_ids: node_ids,
             dataset_id: datasetId,
             algorithm: "alns_hybrid",
@@ -184,19 +183,33 @@ export default function OptimizePage() {
         clearLastResult();
         setVehicleRoutes({});
         setHighlightedVehicleId(null);
-        setVehicleFilter(null);
+        setSelectedVehicleIds(new Set());
         resetOptimize();
     };
 
-    const handleVehicleFilterChange = (value: string) => {
-        if (value === "all") {
-            setVehicleFilter(null);
-            setHighlightedVehicleId(null);
-        } else {
-            const id = Number(value);
-            setVehicleFilter(id);
-            setHighlightedVehicleId(id);
+    const toggleVehicleVisibility = (vehicleId: number) => {
+        setSelectedVehicleIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(vehicleId)) {
+                next.delete(vehicleId);
+            } else {
+                next.add(vehicleId);
+            }
+            return next;
+        });
+        setHighlightedVehicleId(null);
+    };
+
+    const handleSelectAllVehicles = () => {
+        if (data?.routes) {
+            setSelectedVehicleIds(new Set(data.routes.map((r) => r.vehicle_id)));
         }
+        setHighlightedVehicleId(null);
+    };
+
+    const handleClearAllVehicles = () => {
+        setSelectedVehicleIds(new Set());
+        setHighlightedVehicleId(null);
     };
 
     useEffect(() => {
@@ -263,7 +276,6 @@ export default function OptimizePage() {
     const handleExportPDF = async () => {
         if (!mapRef.current || !data) return;
         const previousHighlight = highlightedVehicleId;
-        const previousFilter = vehicleFilter;
         setIsExporting(true);
         try {
             const { default: jsPDF } = await import("jspdf");
@@ -386,7 +398,6 @@ export default function OptimizePage() {
             toast({ title: "PDF Export Failed", variant: "destructive" });
         } finally {
             setHighlightedVehicleId(previousHighlight);
-            setVehicleFilter(previousFilter);
             setIsExporting(false);
         }
     };
@@ -405,10 +416,23 @@ export default function OptimizePage() {
     };
 
     const filteredRoutes = data?.routes
-        ? vehicleFilter !== null
-            ? data.routes.filter((r) => r.vehicle_id === vehicleFilter)
-            : data.routes
+        ? data.routes.filter((r) => selectedVehicleIds.has(r.vehicle_id))
         : [];
+
+    // PDF export always needs the full route set (it isolates one vehicle at a time
+    // via highlightedVehicleId), so the checkbox filter is bypassed while exporting.
+    const mapResult = data
+        ? isExporting
+            ? data
+            : { ...data, routes: filteredRoutes }
+        : data;
+    const mapVehicleRoutes = isExporting
+        ? vehicleRoutes
+        : Object.fromEntries(
+              Object.entries(vehicleRoutes).filter(([vid]) =>
+                  selectedVehicleIds.has(Number(vid)),
+              ),
+          );
 
     const totalStops = data?.routes?.reduce(
         (sum, r) => sum + getRouteStats(r).totalStops, 0,
@@ -479,11 +503,11 @@ export default function OptimizePage() {
                                 <div
                                     className="rounded-lg border overflow-hidden h-[650px] lg:h-[850px]"
                                 >
-                                    {data ? (
+                                    {data && mapResult ? (
                                         <OptimizeResultMap
                                             nodes={nodes}
-                                            result={data}
-                                            vehicleRoutes={vehicleRoutes}
+                                            result={mapResult}
+                                            vehicleRoutes={mapVehicleRoutes}
                                             highlightedVehicleId={highlightedVehicleId}
                                             showOnlyHighlighted={isExporting}
                                         />
@@ -559,6 +583,26 @@ export default function OptimizePage() {
                                         {(datasetsQ.data ?? []).map((d) => (
                                             <SelectItem key={d.id} value={d.id}>
                                                 {d.label} – {d.park_count} parks, {d.refill_count} refills
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Fleet Size */}
+                            <div className="space-y-2">
+                                <Label htmlFor="fleet-size-select">Number of Trucks</Label>
+                                <Select
+                                    value={numVehicles.toString()}
+                                    onValueChange={(v) => setNumVehicles(Number(v))}
+                                >
+                                    <SelectTrigger id="fleet-size-select">
+                                        <SelectValue placeholder="Select fleet size" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {VEHICLE_COUNT_OPTIONS.map((n) => (
+                                            <SelectItem key={n} value={n.toString()}>
+                                                {n} trucks
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -677,6 +721,71 @@ export default function OptimizePage() {
                             </Alert>
                         </motion.div>
                     )}
+
+                    {/* Vehicle Filter */}
+                    <AnimatePresence>
+                        {data?.routes?.length ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                            >
+                                <Card>
+                                    <CardHeader className="py-3">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <Filter className="h-4 w-4 text-primary" />
+                                            Vehicle Filter
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        <div className="flex flex-col gap-2">
+                                            {data.routes.map((r) => {
+                                                const color = getVehicleColor(r.vehicle_id);
+                                                const checked = selectedVehicleIds.has(r.vehicle_id);
+                                                return (
+                                                    <label
+                                                        key={r.vehicle_id}
+                                                        className="flex items-center gap-2 text-sm cursor-pointer select-none"
+                                                    >
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onCheckedChange={() =>
+                                                                toggleVehicleVisibility(r.vehicle_id)
+                                                            }
+                                                            className="rounded-[4px]"
+                                                        />
+                                                        <span
+                                                            className="w-2.5 h-2.5 rounded-sm shrink-0"
+                                                            style={{ backgroundColor: color }}
+                                                        />
+                                                        Vehicle {r.vehicle_id + 1}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                        <Separator />
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 h-8 text-xs"
+                                                onClick={handleSelectAllVehicles}
+                                            >
+                                                All
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 h-8 text-xs"
+                                                onClick={handleClearAllVehicles}
+                                            >
+                                                None
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ) : null}
+                    </AnimatePresence>
                 </div>
             </div>
 
@@ -746,7 +855,9 @@ export default function OptimizePage() {
                                         </div>
                                         <p className="text-2xl font-bold text-green-700 dark:text-green-300">
                                             {data.active_vehicles ?? data.vehicle_used}{" "}
-                                            <span className="text-sm font-normal">/ 7</span>
+                                            <span className="text-sm font-normal">
+                                                / {lastPayload?.num_vehicles ?? numVehicles}
+                                            </span>
                                         </p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                             Active / Available
@@ -867,33 +978,9 @@ export default function OptimizePage() {
                                         <ListTree className="h-5 w-5 text-primary" />
                                         Route Details
                                     </CardTitle>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <Filter className="h-4 w-4 text-muted-foreground" />
-                                            <Select
-                                                value={vehicleFilter?.toString() ?? "all"}
-                                                onValueChange={handleVehicleFilterChange}
-                                            >
-                                                <SelectTrigger className="w-[160px] h-8 text-sm">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Vehicles</SelectItem>
-                                                    {data.routes.map((r) => (
-                                                        <SelectItem
-                                                            key={r.vehicle_id}
-                                                            value={r.vehicle_id.toString()}
-                                                        >
-                                                            Vehicle {r.vehicle_id + 1}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <span className="text-sm text-muted-foreground">
-                                            {totalStops} stops
-                                        </span>
-                                    </div>
+                                    <span className="text-sm text-muted-foreground">
+                                        {totalStops} stops
+                                    </span>
                                 </div>
                             </CardHeader>
                             <div className="max-w-full overflow-x-auto">
@@ -922,13 +1009,10 @@ export default function OptimizePage() {
                                     </TableHeader>
                                     <TableBody>
                                         {filteredRoutes.map((r) => {
-                                            const routeIndex = data.routes.findIndex(
-                                                (route) => route.vehicle_id === r.vehicle_id,
-                                            );
-                                            const color =
-                                                ROUTE_COLORS[routeIndex % ROUTE_COLORS.length];
+                                            const color = getVehicleColor(r.vehicle_id);
                                             const isHighlighted =
-                                                highlightedVehicleId === r.vehicle_id;
+                                                selectedVehicleIds.size === 1 &&
+                                                selectedVehicleIds.has(r.vehicle_id);
                                             const stats = getRouteStats(r);
 
                                             return (
@@ -990,11 +1074,12 @@ export default function OptimizePage() {
                                                                         className="h-8 w-8"
                                                                         onClick={() => {
                                                                             if (isHighlighted) {
-                                                                                setHighlightedVehicleId(null);
-                                                                                setVehicleFilter(null);
+                                                                                handleSelectAllVehicles();
                                                                             } else {
+                                                                                setSelectedVehicleIds(
+                                                                                    new Set([r.vehicle_id]),
+                                                                                );
                                                                                 setHighlightedVehicleId(r.vehicle_id);
-                                                                                setVehicleFilter(r.vehicle_id);
                                                                             }
                                                                         }}
                                                                     >
