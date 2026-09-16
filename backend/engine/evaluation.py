@@ -8,6 +8,7 @@ Contains both:
   - Metric helpers: ``total_time_minutes``, ``makespan_minutes``, ``route_time_std``,
     ``count_refill_visits``, ``count_active_vehicles``, ``load_profile_liters``.
 """
+
 from __future__ import annotations
 
 import math
@@ -15,19 +16,19 @@ from typing import Dict, List, Optional, Tuple
 
 from .data import Node, TimeMatrix
 
-
 # ---------------------------------------------------------------------------
 # Operational constants (matching notebook cell 1)
 # ---------------------------------------------------------------------------
-TRUCK_CAP: float = 5000.0           # tank capacity (liters)
-OP_WINDOW: float = 540.0            # operational window (minutes) 06:00–15:00
-SERVICE_TIME_FULL: float = 20.0     # watering service time for 5000 L full (minutes)
-SERVICE_TIME_REFILL: float = 5.0    # refill service time at station (minutes)
+TRUCK_CAP: float = 5000.0  # tank capacity (liters)
+OP_WINDOW: float = 540.0  # operational window (minutes) 06:00–15:00
+SERVICE_TIME_FULL: float = 20.0  # watering service time for 5000 L full (minutes)
+SERVICE_TIME_REFILL: float = 5.0  # refill service time at station (minutes)
 
 
 # ---------------------------------------------------------------------------
 # Simple route time (used internally by rebalance, neighborhoods, etc.)
 # ---------------------------------------------------------------------------
+
 
 def route_time_minutes(
     route: List[str],
@@ -44,6 +45,7 @@ def route_time_minutes(
 # ---------------------------------------------------------------------------
 # Notebook-aligned route evaluation (evaluate_route from cell 5)
 # ---------------------------------------------------------------------------
+
 
 def _find_depot_id(nodes: Dict[str, Node]) -> Optional[str]:
     """Find the depot node id."""
@@ -223,6 +225,7 @@ def rebuild_routes_from_dmap(
 # Aggregate metrics (used by solve.py and downstream)
 # ---------------------------------------------------------------------------
 
+
 def total_time_minutes(
     routes: List[List[str]], nodes: Dict[str, Node], tm: TimeMatrix
 ) -> float:
@@ -263,12 +266,10 @@ def route_time_std(
         return 0.0
     mean = sum(durations) / len(durations)
     variance = sum((d - mean) ** 2 for d in durations) / len(durations)
-    return variance ** 0.5
+    return variance**0.5
 
 
-def count_refill_visits(
-    routes: List[List[str]], nodes: Dict[str, Node]
-) -> int:
+def count_refill_visits(routes: List[List[str]], nodes: Dict[str, Node]) -> int:
     """Total number of refill-station visits across all active routes."""
     n = 0
     for r in routes:
@@ -285,16 +286,11 @@ def count_active_vehicles(routes: List[List[str]]) -> int:
     return sum(1 for r in routes if len(r) > 2)
 
 
-def count_empty_trucks(
-    routes: List[List[str]], nodes: Dict[str, Node]
-) -> int:
+def count_empty_trucks(routes: List[List[str]], nodes: Dict[str, Node]) -> int:
     """Count trucks with no park visits (only depot + possibly refill)."""
     n = 0
     for r in routes:
-        has_park = any(
-            nodes.get(nid) and nodes[nid].type == "park"
-            for nid in r[1:-1]
-        )
+        has_park = any(nodes.get(nid) and nodes[nid].type == "park" for nid in r[1:-1])
         if not has_park:
             n += 1
     return n

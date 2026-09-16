@@ -11,6 +11,7 @@ Key differences from the previous MMAS-style implementation:
   - Deposit from both iteration-best AND global-best.
   - Multi-pass rebalance (heaviest → lightest) after each ant construction.
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,17 +43,20 @@ class ACOConfig:
     seed: int = 42
 
     num_ants: int = 20
-    alpha: float = 1.0          # pheromone exponent
-    beta: float = 2.0           # heuristic (1/travel_time) exponent
-    rho: float = 0.1            # evaporation rate
-    q0_deposit: float = 1.0     # deposit constant Q in deposit = Q / cost
-    budget_factor: float = 1.15  # demand budget per truck = total_demand / n_trucks * factor
+    alpha: float = 1.0  # pheromone exponent
+    beta: float = 2.0  # heuristic (1/travel_time) exponent
+    rho: float = 0.1  # evaporation rate
+    q0_deposit: float = 1.0  # deposit constant Q in deposit = Q / cost
+    budget_factor: float = (
+        1.15  # demand budget per truck = total_demand / n_trucks * factor
+    )
     max_iter: Optional[int] = None  # optional iteration cap (None = time-limited only)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _group_bases(nodes: Dict[str, Node], selected_expanded: List[str]) -> List[str]:
     """Distinct park bases (before split '#'), preserving discovery order."""
@@ -79,6 +83,7 @@ def _base_representative(base: str, groups: Dict[str, List[str]]) -> str:
 # ---------------------------------------------------------------------------
 # Rebalance (ported from notebook's _rebalance_solution)
 # ---------------------------------------------------------------------------
+
 
 def _rebalance_solution(
     routes: List[List[str]],
@@ -143,9 +148,7 @@ def _rebalance_solution(
 
             # Try moving all parts to the lightest route
             cand = deepcopy_routes(current)
-            cand[heaviest_idx] = [
-                nid for nid in cand[heaviest_idx] if nid not in parts
-            ]
+            cand[heaviest_idx] = [nid for nid in cand[heaviest_idx] if nid not in parts]
             # Ensure depot bookends
             if cand[heaviest_idx][0] != depot_id:
                 cand[heaviest_idx].insert(0, depot_id)
@@ -188,6 +191,7 @@ def _rebalance_solution(
 # ---------------------------------------------------------------------------
 # Ant construction (ported from notebook's _ant_construct)
 # ---------------------------------------------------------------------------
+
 
 def _construct_one_ant(
     nodes: Dict[str, Node],
@@ -257,7 +261,7 @@ def _construct_one_ant(
                 eta = (1.0 / (travel + 1e-6)) ** cfg.beta
                 key = (cur.split("#")[0], base)
                 tau_ij = tau.get(key, 1.0)
-                weights.append((tau_ij ** cfg.alpha) * eta)
+                weights.append((tau_ij**cfg.alpha) * eta)
 
             # Roulette wheel
             tot = sum(weights)
@@ -304,7 +308,10 @@ def _construct_one_ant(
             if d <= 0.1:
                 continue
             # Sort trucks by current route time (lightest first)
-            order = sorted(range(len(routes)), key=lambda ri: route_time_minutes(routes[ri], nodes, tm))
+            order = sorted(
+                range(len(routes)),
+                key=lambda ri: route_time_minutes(routes[ri], nodes, tm),
+            )
             placed = False
             for ri in order:
                 if d <= 0.1:
@@ -321,7 +328,10 @@ def _construct_one_ant(
                 break
             if not placed:
                 # Force to lightest
-                lightest = min(range(len(routes)), key=lambda ri: route_time_minutes(routes[ri], nodes, tm))
+                lightest = min(
+                    range(len(routes)),
+                    key=lambda ri: route_time_minutes(routes[ri], nodes, tm),
+                )
                 parts = groups.get(base, [base])
                 insert_pos = max(1, len(routes[lightest]) - 1)
                 routes[lightest][insert_pos:insert_pos] = parts
@@ -337,6 +347,7 @@ def _construct_one_ant(
 # ---------------------------------------------------------------------------
 # Edge extraction (for pheromone deposit)
 # ---------------------------------------------------------------------------
+
 
 def _edges_of(
     routes: List[List[str]], part_to_base: Dict[str, str]
@@ -356,6 +367,7 @@ def _edges_of(
 # ---------------------------------------------------------------------------
 # Main ACO loop (ported from notebook's run_aco)
 # ---------------------------------------------------------------------------
+
 
 def aco_optimize(
     init_routes: List[List[str]],
@@ -395,8 +407,13 @@ def aco_optimize(
     def finalize(routes: List[List[str]]) -> List[List[str]]:
         """Apply safety passes (identical to ALNS) for feasibility."""
         routes = ensure_groups_single_vehicle(
-            routes, groups, nodes, tm, depot_id,
-            vehicle_capacity=vehicle_capacity, refill_ids=refill_ids,
+            routes,
+            groups,
+            nodes,
+            tm,
+            depot_id,
+            vehicle_capacity=vehicle_capacity,
+            refill_ids=refill_ids,
         )
         routes, _ = ensure_all_routes_capacity(
             routes, nodes, vehicle_capacity, refill_ids, tm, depot_id
@@ -434,18 +451,27 @@ def aco_optimize(
             if not time_ok():
                 break
             raw = _construct_one_ant(
-                nodes=nodes, tm=tm, depot_id=depot_id,
-                bases=bases, groups=groups,
+                nodes=nodes,
+                tm=tm,
+                depot_id=depot_id,
+                bases=bases,
+                groups=groups,
                 num_vehicles=num_vehicles,
                 vehicle_capacity=vehicle_capacity,
                 refill_ids=refill_ids,
-                tau=tau, cfg=cfg,
+                tau=tau,
+                cfg=cfg,
             )
             routes = finalize(raw)
             # Rebalance
             routes = _rebalance_solution(
-                routes, nodes, tm, groups,
-                vehicle_capacity, refill_ids, depot_id,
+                routes,
+                nodes,
+                tm,
+                groups,
+                vehicle_capacity,
+                refill_ids,
+                depot_id,
                 objective,
             )
             cost = objective(routes)
@@ -463,7 +489,7 @@ def aco_optimize(
         # --- Pheromone update (notebook style) ---
         # 1. Evaporate ALL pheromone
         for key in list(tau.keys()):
-            tau[key] *= (1.0 - cfg.rho)
+            tau[key] *= 1.0 - cfg.rho
 
         # 2. Deposit from iteration-best AND global-best
         for cost_d, routes_d in [
@@ -481,7 +507,9 @@ def aco_optimize(
 
     log.info(
         "ACO done: %d iterations, best_cost=%.3f, pheromone entries=%d",
-        iteration, best_cost, len(tau),
+        iteration,
+        best_cost,
+        len(tau),
     )
     return best_routes
 

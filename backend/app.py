@@ -59,7 +59,11 @@ app.include_router(optimize_router)
 # lists which filenames exist; this mount serves the actual bytes.
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), "data", "experiments", "assets")
 if os.path.isdir(_ASSETS_DIR):
-    app.mount("/experiment-assets", StaticFiles(directory=_ASSETS_DIR), name="experiment-assets")
+    app.mount(
+        "/experiment-assets",
+        StaticFiles(directory=_ASSETS_DIR),
+        name="experiment-assets",
+    )
 
 
 # --- Operational-mode-only routers (require Supabase / DATABASE_URL) -----------------
@@ -81,4 +85,6 @@ if not settings.DEMO_MODE:
     app.include_router(routes_history.router)
     log.info("Operational mode: DB-backed routers mounted.")
 else:
-    log.info("Demo mode: DB-backed routers NOT mounted; only stateless endpoints active.")
+    log.info(
+        "Demo mode: DB-backed routers NOT mounted; only stateless endpoints active."
+    )

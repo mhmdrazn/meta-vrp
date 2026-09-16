@@ -12,6 +12,7 @@ Key changes from the previous implementation to match the notebook:
   - _rebalance_solution: multi-pass heaviest→lightest park migration (from notebook).
   - Config defaults: init_temperature=100, score_update_period=20 (seg=20), react=0.1.
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,7 +70,7 @@ class ALNSConfig:
 
     # adaptive weights (notebook style)
     score_update_period: int = 20  # seg: update every N iters
-    react: float = 0.1             # reactivity factor
+    react: float = 0.1  # reactivity factor
 
     # tabu
     tabu_tenure: int = 20
@@ -94,6 +95,7 @@ class ALNSConfig:
 # ---------------------------------------------------------------------------
 # Rebalance (ported from notebook's _rebalance_solution)
 # ---------------------------------------------------------------------------
+
 
 def _rebalance_solution(
     routes: List[List[str]],
@@ -156,9 +158,7 @@ def _rebalance_solution(
 
             # Try moving all parts to lightest route
             cand = deepcopy_routes(current)
-            cand[heaviest_idx] = [
-                nid for nid in cand[heaviest_idx] if nid not in parts
-            ]
+            cand[heaviest_idx] = [nid for nid in cand[heaviest_idx] if nid not in parts]
             if not cand[heaviest_idx] or cand[heaviest_idx][0] != depot_id:
                 cand[heaviest_idx].insert(0, depot_id)
             if not cand[heaviest_idx] or cand[heaviest_idx][-1] != depot_id:
@@ -199,6 +199,7 @@ def _rebalance_solution(
 # ---------------------------------------------------------------------------
 # Main ALNS loop (aligned with notebook's run_alns)
 # ---------------------------------------------------------------------------
+
 
 def alns_optimize(
     init_routes: List[List[str]],
@@ -287,7 +288,8 @@ def alns_optimize(
         # --- REPAIR ---
         if cfg.use_construct_as_repair:
             repaired = greedy_construct(
-                nodes=nodes, tm=tm,
+                nodes=nodes,
+                tm=tm,
                 selected_parks=[p for p in removed if nodes[p].type == "park"],
                 depot_id=depot_id,
                 num_vehicles=len(partial),
@@ -298,7 +300,10 @@ def alns_optimize(
         else:
             try:
                 repaired = r_op(
-                    partial, removed, nodes, tm,
+                    partial,
+                    removed,
+                    nodes,
+                    tm,
                     {
                         "vehicle_capacity": vehicle_capacity,
                         "refill_ids": refill_ids,
@@ -310,7 +315,10 @@ def alns_optimize(
                 )
             except TypeError:
                 repaired = r_op(
-                    partial, removed, nodes, tm,
+                    partial,
+                    removed,
+                    nodes,
+                    tm,
                     {
                         "vehicle_capacity": vehicle_capacity,
                         "refill_ids": refill_ids,
@@ -363,20 +371,30 @@ def alns_optimize(
         if it % cfg.score_update_period == 0:
             for i in range(n_destroy):
                 if d_counts[i] > 0:
-                    d_weights[i] = (1 - cfg.react) * d_weights[i] + cfg.react * (d_scores[i] / d_counts[i])
+                    d_weights[i] = (1 - cfg.react) * d_weights[i] + cfg.react * (
+                        d_scores[i] / d_counts[i]
+                    )
                 d_scores[i] = 0.0
                 d_counts[i] = 0
             for i in range(n_repair):
                 if r_counts[i] > 0:
-                    r_weights[i] = (1 - cfg.react) * r_weights[i] + cfg.react * (r_scores[i] / r_counts[i])
+                    r_weights[i] = (1 - cfg.react) * r_weights[i] + cfg.react * (
+                        r_scores[i] / r_counts[i]
+                    )
                 r_scores[i] = 0.0
                 r_counts[i] = 0
 
         # --- Rebalance ---
         if cfg.rebalance_period > 0 and it % cfg.rebalance_period == 0:
             rebalanced, reb_cost = _rebalance_solution(
-                current, nodes, tm, groups,
-                vehicle_capacity, refill_ids, depot_id, objective,
+                current,
+                nodes,
+                tm,
+                groups,
+                vehicle_capacity,
+                refill_ids,
+                depot_id,
+                objective,
             )
             reb_delta = reb_cost - current_cost
             if reb_delta <= 0 or sa.accept(reb_delta):
@@ -390,8 +408,14 @@ def alns_optimize(
 
     # Final rebalance pass
     best, best_cost = _rebalance_solution(
-        best, nodes, tm, groups,
-        vehicle_capacity, refill_ids, depot_id, objective,
+        best,
+        nodes,
+        tm,
+        groups,
+        vehicle_capacity,
+        refill_ids,
+        depot_id,
+        objective,
     )
 
     log.info("ALNS done: %d iterations, best_cost=%.3f", it, best_cost)
@@ -650,7 +674,9 @@ def repair_greedy(
                 best_overall_pos = best_pos_in_route
 
         if best_overall_route_idx == -1:
-            log.warning("Cannot find valid insertion spot for group %s. Skipping.", base)
+            log.warning(
+                "Cannot find valid insertion spot for group %s. Skipping.", base
+            )
             continue
 
         target_route_idx = best_overall_route_idx

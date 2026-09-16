@@ -7,6 +7,7 @@
 - GET  /datasets     : discovery endpoint powering the frontend Dataset A/B selector.
 - GET  /experiments  : serve pre-computed experiment CSVs as JSON (baseline, scenario1, scenario2).
 """
+
 from __future__ import annotations
 
 import csv
@@ -63,7 +64,11 @@ def _run_solve(req: OptimizeRequest) -> OptimizeResponse:
         refill_ids = [nid for nid, n in nodes.items() if n.type == "refill"]
 
     # Time budget: request override wins, else settings default.
-    time_limit = float(req.time_limit_sec) if req.time_limit_sec else float(settings.TIME_LIMIT_SEC)
+    time_limit = (
+        float(req.time_limit_sec)
+        if req.time_limit_sec
+        else float(settings.TIME_LIMIT_SEC)
+    )
 
     try:
         result = engine_solve(
@@ -117,7 +122,8 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
     """Run a single optimisation. Stateless — no DB writes, no job history."""
     hard_timeout = max(
         3.0,
-        float(req.time_limit_sec if req.time_limit_sec else settings.TIME_LIMIT_SEC) + 5.0,
+        float(req.time_limit_sec if req.time_limit_sec else settings.TIME_LIMIT_SEC)
+        + 5.0,
     )
     fut = _EXECUTOR.submit(_run_solve, req)
     try:
@@ -304,7 +310,9 @@ def get_experiment_assets(
         # Keep files for this dataset, plus dataset-agnostic shared charts (e.g.
         # scenario2's combined convergence grid covers both datasets in one image).
         fnames = [
-            f for f in fnames
-            if (prefix and f.startswith(prefix)) or not f.startswith(tuple(other_prefixes))
+            f
+            for f in fnames
+            if (prefix and f.startswith(prefix))
+            or not f.startswith(tuple(other_prefixes))
         ]
     return fnames

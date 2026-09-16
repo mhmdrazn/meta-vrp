@@ -4,6 +4,7 @@
 Both the API endpoint and the offline experiment scripts use it — no separate
 per-algorithm feasibility check exists.
 """
+
 from __future__ import annotations
 
 from typing import Dict, Iterable, List

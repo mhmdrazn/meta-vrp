@@ -239,14 +239,26 @@ def build_initial_solution(
 ) -> Tuple[List[List[str]], Dict[int, Dict[str, float]]]:
     """Build initial solution using notebook cell 30 logic."""
     import random
-    from .evaluation import evaluate_route, rebuild_route_with_refills, rebuild_routes_from_dmap
+    from .evaluation import (
+        evaluate_route,
+        rebuild_route_with_refills,
+        rebuild_routes_from_dmap,
+    )
 
     rng = random.Random(seed)
     park_ids = [nid for nid, n in nodes.items() if n.type == "park"]
     demands = {nid: nodes[nid].demand_liters for nid in park_ids}
-    refills_available = refill_ids if refill_ids else [nid for nid, n in nodes.items() if n.type == "refill"]
+    refills_available = (
+        refill_ids
+        if refill_ids
+        else [nid for nid, n in nodes.items() if n.type == "refill"]
+    )
 
-    init_r = min(refills_available, key=lambda r: tm.travel(depot_id, r)) if refills_available else depot_id
+    init_r = (
+        min(refills_available, key=lambda r: tm.travel(depot_id, r))
+        if refills_available
+        else depot_id
+    )
     init_overhead = tm.travel(depot_id, init_r) + 5.0
 
     park_list = list(park_ids)
@@ -331,9 +343,17 @@ def build_initial_solution(
         [
             (
                 ri,
-                evaluate_route(solution[ri], nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=delivery_map[ri])[0]
-                if len(solution[ri]) > 2
-                else 0.0,
+                (
+                    evaluate_route(
+                        solution[ri],
+                        nodes,
+                        tm,
+                        vehicle_capacity=vehicle_capacity,
+                        delivery_amounts=delivery_map[ri],
+                    )[0]
+                    if len(solution[ri]) > 2
+                    else 0.0
+                ),
             )
             for ri in range(num_vehicles)
         ],
@@ -346,7 +366,13 @@ def build_initial_solution(
                 break
             rdmap = delivery_map[ri]
             cur_t = (
-                evaluate_route(solution[ri], nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=rdmap)[0]
+                evaluate_route(
+                    solution[ri],
+                    nodes,
+                    tm,
+                    vehicle_capacity=vehicle_capacity,
+                    delivery_amounts=rdmap,
+                )[0]
                 if len(solution[ri]) > 2
                 else init_overhead
             )
@@ -365,7 +391,9 @@ def build_initial_solution(
             rdmap[nd] = rdmap.get(nd, 0.0) + dv
             remaining[nd] -= dv
             seq = [n for n in park_ids if rdmap.get(n, 0.0) > 0.1]
-            solution[ri] = rebuild_route_with_refills(seq, rdmap, nodes, tm, depot_id, refills_available, vehicle_capacity)
+            solution[ri] = rebuild_route_with_refills(
+                seq, rdmap, nodes, tm, depot_id, refills_available, vehicle_capacity
+            )
 
     leftover = {nd: d for nd, d in remaining.items() if d > 0.1}
     if leftover:
@@ -377,17 +405,35 @@ def build_initial_solution(
                 tmp = dict(delivery_map[ri])
                 tmp[nd] = tmp.get(nd, 0.0) + d
                 seq = [x for x in park_ids if tmp.get(x, 0.0) > 0.1]
-                route = rebuild_route_with_refills(seq, tmp, nodes, tm, depot_id, refills_available, vehicle_capacity)
-                t, feas, _ = evaluate_route(route, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp)
+                route = rebuild_route_with_refills(
+                    seq, tmp, nodes, tm, depot_id, refills_available, vehicle_capacity
+                )
+                t, feas, _ = evaluate_route(
+                    route,
+                    nodes,
+                    tm,
+                    vehicle_capacity=vehicle_capacity,
+                    delivery_amounts=tmp,
+                )
                 cost = t if feas else t + 1e5
                 if cost < best_cost:
                     best_cost, best_ri = cost, ri
             if best_ri is None:
-                best_ri = min(range(num_vehicles), key=lambda r: sum(delivery_map[r].values()))
+                best_ri = min(
+                    range(num_vehicles), key=lambda r: sum(delivery_map[r].values())
+                )
             delivery_map[best_ri][nd] = delivery_map[best_ri].get(nd, 0.0) + d
             remaining[nd] = 0.0
             seq = [x for x in park_ids if delivery_map[best_ri].get(x, 0.0) > 0.1]
-            solution[best_ri] = rebuild_route_with_refills(seq, delivery_map[best_ri], nodes, tm, depot_id, refills_available, vehicle_capacity)
+            solution[best_ri] = rebuild_route_with_refills(
+                seq,
+                delivery_map[best_ri],
+                nodes,
+                tm,
+                depot_id,
+                refills_available,
+                vehicle_capacity,
+            )
 
     return solution, delivery_map
 
@@ -402,13 +448,18 @@ def repair_empty_trucks(
     refill_ids: Optional[List[str]] = None,
     vehicle_capacity: float = 5000.0,
 ) -> Tuple[List[List[str]], Dict[int, Dict[str, float]]]:
-    from .evaluation import evaluate_route, rebuild_route_with_refills, rebuild_routes_from_dmap
+    from .evaluation import (
+        evaluate_route,
+        rebuild_route_with_refills,
+        rebuild_routes_from_dmap,
+    )
 
     park_ids = set(nid for nid, n in nodes.items() if n.type == "park")
 
     for _ in range(num_vehicles):
         empty_trucks = [
-            ri for ri in range(num_vehicles)
+            ri
+            for ri in range(num_vehicles)
             if not any(nid in park_ids for nid in solution[ri][1:-1])
         ]
         if not empty_trucks:
@@ -443,11 +494,39 @@ def repair_empty_trucks(
                 tmp_target = dict(delivery_map[target_ri])
                 tmp_target[nd] = tmp_target.get(nd, 0.0) + partial
 
-                s_donor = rebuild_route_with_refills([x for x in park_ids if tmp_donor.get(x, 0.0) > 0.1], tmp_donor, nodes, tm, depot_id, refill_ids, vehicle_capacity)
-                s_target = rebuild_route_with_refills([x for x in park_ids if tmp_target.get(x, 0.0) > 0.1], tmp_target, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+                s_donor = rebuild_route_with_refills(
+                    [x for x in park_ids if tmp_donor.get(x, 0.0) > 0.1],
+                    tmp_donor,
+                    nodes,
+                    tm,
+                    depot_id,
+                    refill_ids,
+                    vehicle_capacity,
+                )
+                s_target = rebuild_route_with_refills(
+                    [x for x in park_ids if tmp_target.get(x, 0.0) > 0.1],
+                    tmp_target,
+                    nodes,
+                    tm,
+                    depot_id,
+                    refill_ids,
+                    vehicle_capacity,
+                )
 
-                t_d, f_d, _ = evaluate_route(s_donor, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp_donor)
-                t_t, f_t, _ = evaluate_route(s_target, nodes, tm, vehicle_capacity=vehicle_capacity, delivery_amounts=tmp_target)
+                t_d, f_d, _ = evaluate_route(
+                    s_donor,
+                    nodes,
+                    tm,
+                    vehicle_capacity=vehicle_capacity,
+                    delivery_amounts=tmp_donor,
+                )
+                t_t, f_t, _ = evaluate_route(
+                    s_target,
+                    nodes,
+                    tm,
+                    vehicle_capacity=vehicle_capacity,
+                    delivery_amounts=tmp_target,
+                )
 
                 if f_d and f_t:
                     delivery_map[donor_ri] = tmp_donor
@@ -461,5 +540,7 @@ def repair_empty_trucks(
         if not moved:
             break
 
-    solution = rebuild_routes_from_dmap(delivery_map, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity)
+    solution = rebuild_routes_from_dmap(
+        delivery_map, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity
+    )
     return solution, delivery_map

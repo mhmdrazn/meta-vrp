@@ -92,7 +92,15 @@ def load_nodes_json(path: str) -> Tuple[Dict[str, Node], List[str]]:
 
     nodes: Dict[str, Node] = {}
     ids_in_order: List[str] = []
-    required_fields = {"id", "name", "lat", "lon", "type", "demand_liters", "service_min"}
+    required_fields = {
+        "id",
+        "name",
+        "lat",
+        "lon",
+        "type",
+        "demand_liters",
+        "service_min",
+    }
 
     for i, row in enumerate(payload["nodes"]):
         missing = required_fields - set(row.keys())
@@ -124,5 +132,7 @@ def load_time_matrix_npy(path: str, ids_in_order: List[str]) -> TimeMatrix:
         M = M.astype(np.float64)
     n = len(ids_in_order)
     if M.shape != (n, n):
-        raise ValueError(f"{path}: matrix shape {M.shape} does not match nodes count {n}")
+        raise ValueError(
+            f"{path}: matrix shape {M.shape} does not match nodes count {n}"
+        )
     return TimeMatrix(ids_in_order, M)

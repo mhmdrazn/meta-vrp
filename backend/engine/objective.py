@@ -8,6 +8,7 @@ Formula ported directly from notebook cell 6 (evaluate_solution):
           + PENALTY * (tw_violation / OP_WINDOW)
           + PENALTY * n_empty_trucks
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -98,8 +99,13 @@ def evaluate_solution(
     # 3. Balance penalty: penalize route time standard deviation across active trucks
     times = [
         evaluate_route(
-            r, nodes, tm, vehicle_capacity=weights.truck_cap,
-            delivery_amounts=(delivery_map[ri] if (delivery_map and ri in delivery_map) else None)
+            r,
+            nodes,
+            tm,
+            vehicle_capacity=weights.truck_cap,
+            delivery_amounts=(
+                delivery_map[ri] if (delivery_map and ri in delivery_map) else None
+            ),
         )[0]
         for ri, r in enumerate(routes)
         if len(r) > 2
@@ -128,5 +134,7 @@ def search_objective(
     weights: ObjectiveWeights = ObjectiveWeights(),
 ) -> float:
     """Single-source-of-truth objective function (notebook cell 6 evaluate_solution)."""
-    fitness, _ = evaluate_solution(routes, nodes, tm, delivery_map=delivery_map, weights=weights)
+    fitness, _ = evaluate_solution(
+        routes, nodes, tm, delivery_map=delivery_map, weights=weights
+    )
     return fitness

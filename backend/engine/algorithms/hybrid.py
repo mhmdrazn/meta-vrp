@@ -16,6 +16,7 @@ Combines ACO construction with ALNS intensification:
 
 Key notebook references: ``run_hybrid()``, ``repair_aco_guided()``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -73,9 +74,9 @@ class HybridConfig:
     react: float = 0.1
 
     # pheromone params (from notebook)
-    alpha: float = 1.0          # pheromone exponent for aco-guided repair
-    beta: float = 2.0           # heuristic exponent for aco-guided repair
-    rho: float = 0.1            # base evaporation rate (actual rate = rho * 0.01)
+    alpha: float = 1.0  # pheromone exponent for aco-guided repair
+    beta: float = 2.0  # heuristic exponent for aco-guided repair
+    rho: float = 0.1  # base evaporation rate (actual rate = rho * 0.01)
     deposit_multiplier: float = 100.0  # pheromone deposit = multiplier / cost
 
     # rebalance
@@ -88,6 +89,7 @@ class HybridConfig:
 # ---------------------------------------------------------------------------
 # ACO-guided repair operator (ported from notebook's repair_aco_guided)
 # ---------------------------------------------------------------------------
+
 
 def repair_aco_guided(
     routes: List[List[str]],
@@ -183,16 +185,21 @@ def repair_aco_guided(
             tau_key = (last_base, p0_base)
             tau_val = pher.get(tau_key, 1.0)
 
-            tau_component = tau_val ** alpha
+            tau_component = tau_val**alpha
             eta_component = (1.0 / (t + 1e-6)) ** beta
             weights.append(tau_component * eta_component)
 
         # Select route via roulette wheel
         tot = sum(weights)
         if tot <= 0:
-            target_ri = min(range(len(current)), key=lambda r: sum(
-                nodes[nid].demand_liters for nid in current[r] if nodes.get(nid) and nodes[nid].type == "park"
-            ))
+            target_ri = min(
+                range(len(current)),
+                key=lambda r: sum(
+                    nodes[nid].demand_liters
+                    for nid in current[r]
+                    if nodes.get(nid) and nodes[nid].type == "park"
+                ),
+            )
         else:
             r_fn = rng.random if rng else random.random
             r_val = r_fn() * tot
@@ -223,6 +230,7 @@ def repair_aco_guided(
 # Edge extraction for pheromone operations
 # ---------------------------------------------------------------------------
 
+
 def _edges_of_routes(
     routes: List[List[str]],
 ) -> List[Tuple[str, str]]:
@@ -240,6 +248,7 @@ def _edges_of_routes(
 # ---------------------------------------------------------------------------
 # Main Hybrid ALNS+ACO loop (ported from notebook's run_hybrid)
 # ---------------------------------------------------------------------------
+
 
 def hybrid_optimize(
     init_routes: List[List[str]],
@@ -349,8 +358,16 @@ def hybrid_optimize(
             new_routes = repair_regret2(partial, removed, nodes, tm, ctx, groups)
         else:  # "aco"
             new_routes = repair_aco_guided(
-                partial, removed, nodes, tm, ctx, groups,
-                pher, cfg.alpha, cfg.beta, rng=rng,
+                partial,
+                removed,
+                nodes,
+                tm,
+                ctx,
+                groups,
+                pher,
+                cfg.alpha,
+                cfg.beta,
+                rng=rng,
             )
 
         new_routes, _ = ensure_all_routes_capacity(
@@ -393,7 +410,7 @@ def hybrid_optimize(
         # Slow evaporation: rho * 0.01 (notebook FIX 1: 10× slower)
         evap_rate = cfg.rho * 0.01
         for key in list(pher.keys()):
-            pher[key] *= (1.0 - evap_rate)
+            pher[key] *= 1.0 - evap_rate
 
         sa.cool()
 
@@ -401,20 +418,30 @@ def hybrid_optimize(
         if it % cfg.score_update_period == 0:
             for i in range(n_destroy):
                 if d_counts[i] > 0:
-                    d_weights[i] = (1 - cfg.react) * d_weights[i] + cfg.react * (d_scores[i] / d_counts[i])
+                    d_weights[i] = (1 - cfg.react) * d_weights[i] + cfg.react * (
+                        d_scores[i] / d_counts[i]
+                    )
                 d_scores[i] = 0.0
                 d_counts[i] = 0
             for i in range(n_repair):
                 if r_counts[i] > 0:
-                    r_weights[i] = (1 - cfg.react) * r_weights[i] + cfg.react * (r_scores[i] / r_counts[i])
+                    r_weights[i] = (1 - cfg.react) * r_weights[i] + cfg.react * (
+                        r_scores[i] / r_counts[i]
+                    )
                 r_scores[i] = 0.0
                 r_counts[i] = 0
 
         # --- Rebalance ---
         if cfg.rebalance_period > 0 and it % cfg.rebalance_period == 0:
             rebalanced, reb_cost = _rebalance_solution(
-                cur_dmap, nodes, tm, groups,
-                vehicle_capacity, refill_ids, depot_id, objective,
+                cur_dmap,
+                nodes,
+                tm,
+                groups,
+                vehicle_capacity,
+                refill_ids,
+                depot_id,
+                objective,
             )
             reb_delta = reb_cost - cur_cost
             if reb_delta <= 0 or sa.accept(reb_delta):
@@ -426,8 +453,14 @@ def hybrid_optimize(
 
     # Final rebalance
     best, best_cost = _rebalance_solution(
-        best, nodes, tm, groups,
-        vehicle_capacity, refill_ids, depot_id, objective,
+        best,
+        nodes,
+        tm,
+        groups,
+        vehicle_capacity,
+        refill_ids,
+        depot_id,
+        objective,
     )
 
     log.info("Hybrid ALNS+ACO done: %d iterations, best_cost=%.3f", it, best_cost)

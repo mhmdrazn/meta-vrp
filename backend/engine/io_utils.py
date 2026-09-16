@@ -13,6 +13,7 @@ CLI:
     python -m backend.engine.io_utils validate       # validate every available dataset
     python -m backend.engine.io_utils list           # print discovered datasets
 """
+
 from __future__ import annotations
 
 import argparse
@@ -65,7 +66,8 @@ def _processed_dir() -> str:
 def get_available_datasets() -> List[DatasetSpec]:
     """Return only the datasets whose JSON+NPY files actually exist."""
     return [
-        s for s in _all_specs(_processed_dir())
+        s
+        for s in _all_specs(_processed_dir())
         if os.path.exists(s.nodes_path) and os.path.exists(s.matrix_path)
     ]
 
@@ -74,7 +76,9 @@ def _spec(dataset_id: str) -> DatasetSpec:
     for s in _all_specs(_processed_dir()):
         if s.id == dataset_id:
             return s
-    raise ValueError(f"Unknown dataset_id: {dataset_id!r}. Known: {[s.id for s in _all_specs(_processed_dir())]}")
+    raise ValueError(
+        f"Unknown dataset_id: {dataset_id!r}. Known: {[s.id for s in _all_specs(_processed_dir())]}"
+    )
 
 
 @lru_cache(maxsize=8)
@@ -114,19 +118,27 @@ def validate_dataset(nodes: Dict[str, Node], tm: TimeMatrix) -> None:
             raise ValueError(f"node {nid}: longitude {n.lon} out of range [-180, 180]")
         if n.type == "park":
             if n.demand_liters <= 0:
-                raise ValueError(f"park {nid}: demand_liters must be > 0, got {n.demand_liters}")
+                raise ValueError(
+                    f"park {nid}: demand_liters must be > 0, got {n.demand_liters}"
+                )
             if n.service_min < 0:
-                raise ValueError(f"park {nid}: service_min must be >= 0, got {n.service_min}")
+                raise ValueError(
+                    f"park {nid}: service_min must be >= 0, got {n.service_min}"
+                )
 
     # 3. Exactly one depot.
     depots = [nid for nid, n in nodes.items() if n.type == "depot"]
     if len(depots) != 1:
-        raise ValueError(f"dataset must contain exactly one depot, found {len(depots)}: {depots}")
+        raise ValueError(
+            f"dataset must contain exactly one depot, found {len(depots)}: {depots}"
+        )
 
     # 4. Matrix shape & index-order correspondence.
     n = len(nodes)
     if tm.M.shape != (n, n):
-        raise ValueError(f"time matrix shape {tm.M.shape} does not match nodes count {n}")
+        raise ValueError(
+            f"time matrix shape {tm.M.shape} does not match nodes count {n}"
+        )
     if list(tm.ids) != list(nodes.keys()):
         raise ValueError(
             "time matrix ids order does not match nodes insertion order — "
@@ -135,6 +147,7 @@ def validate_dataset(nodes: Dict[str, Node], tm: TimeMatrix) -> None:
 
     # 5. No NaN/inf in the matrix.
     import numpy as np
+
     if not np.isfinite(tm.M).all():
         bad = int((~np.isfinite(tm.M)).sum())
         raise ValueError(f"time matrix contains {bad} non-finite entries")
@@ -157,7 +170,9 @@ def _cli_validate(dataset_ids: Iterable[str]) -> int:
                 f"{len(nodes)} nodes (1 depot, {n_park} park, {n_refill} refill), "
                 f"matrix {tm.M.shape}, min={tm.M.min():.3g} max={tm.M.max():.3g}"
             )
-        except Exception as e:  # noqa: BLE001 — CLI wants a clean message, not a traceback
+        except (
+            Exception
+        ) as e:  # noqa: BLE001 — CLI wants a clean message, not a traceback
             print(f"[FAIL] {did}: {e}", file=sys.stderr)
             exit_code = 1
     return exit_code
@@ -166,7 +181,10 @@ def _cli_validate(dataset_ids: Iterable[str]) -> int:
 def _cli_list() -> int:
     specs = get_available_datasets()
     if not specs:
-        print("(no datasets found — run scripts/convert_dataset.py first)", file=sys.stderr)
+        print(
+            "(no datasets found — run scripts/convert_dataset.py first)",
+            file=sys.stderr,
+        )
         return 1
     for s in specs:
         print(f"{s.id}\t{s.label}\t{s.nodes_path}\t{s.matrix_path}")
@@ -178,7 +196,11 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list", help="print discovered datasets")
     vp = sub.add_parser("validate", help="validate all (or specified) datasets")
-    vp.add_argument("dataset_ids", nargs="*", help="specific dataset ids to validate (default: all available)")
+    vp.add_argument(
+        "dataset_ids",
+        nargs="*",
+        help="specific dataset ids to validate (default: all available)",
+    )
     args = ap.parse_args()
 
     if args.cmd == "list":
