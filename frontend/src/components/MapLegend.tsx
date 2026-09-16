@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { cn, VEHICLE_ROUTE_COLORS } from '@/lib/utils'
+import { cn, getVehicleColor } from '@/lib/utils'
 
-const ROUTE_COLORS = [
-  { color: VEHICLE_ROUTE_COLORS[0], label: 'Blue' },
-  { color: VEHICLE_ROUTE_COLORS[1], label: 'Purple' },
-  { color: VEHICLE_ROUTE_COLORS[2], label: 'Pink' },
-  { color: VEHICLE_ROUTE_COLORS[3], label: 'Orange' },
-  { color: VEHICLE_ROUTE_COLORS[4], label: 'Yellow' },
-  { color: VEHICLE_ROUTE_COLORS[5], label: 'Emerald' },
-]
+const ROUTE_COLORS = Array.from({ length: 12 }, (_, idx) => ({
+  color: getVehicleColor(idx),
+  label: `Vehicle ${idx + 1}`,
+}))
 
 export default function MapLegend() {
   const [isOpen, setIsOpen] = useState(true)
