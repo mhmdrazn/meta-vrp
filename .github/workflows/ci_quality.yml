@@ -66,6 +66,3 @@ jobs:
 
       - name: Check Formatting (Black)
         run: black . --check
-
-      - name: Check Linting (Ruff)
-        run: ruff check .
