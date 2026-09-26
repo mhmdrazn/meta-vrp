@@ -24,7 +24,7 @@ interface MapLegendProps {
 
 export default function MapLegend({ vehicleFilter }: MapLegendProps) {
   const [isOpen, setIsOpen] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
   )
 
   return (
@@ -169,7 +169,10 @@ export default function MapLegend({ vehicleFilter }: MapLegendProps) {
               <div className='grid grid-cols-2 gap-2'>
                 {ROUTE_COLORS.map((rc, idx) => (
                   <div key={idx} className='flex items-center gap-2'>
-                    <div className='w-6 h-1 rounded-full' style={{ backgroundColor: rc.color }}></div>
+                    <div
+                      className='w-6 h-1 rounded-full'
+                      style={{ backgroundColor: rc.color }}
+                    ></div>
                     <span className='text-[10px]'>Vehicle {idx + 1}</span>
                   </div>
                 ))}
