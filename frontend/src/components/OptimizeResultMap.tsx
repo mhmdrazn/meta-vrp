@@ -6,18 +6,37 @@ import L from 'leaflet'
 import { getDemandColor, getVehicleColor } from '../lib/utils'
 import MapLegend from './MapLegend'
 
+interface VehicleFilterProps {
+  routes: { vehicle_id: number }[]
+  selectedVehicleIds: Set<number>
+  onToggleVehicle: (vehicleId: number) => void
+  onSelectAll: () => void
+  onClearAll: () => void
+}
+
 type Props = {
   nodes: Node[]
   result: OptimizeResponse
   vehicleRoutes: Record<number, Geometry[]>
   highlightedVehicleId: number | null
   showOnlyHighlighted?: boolean // <-- PROP BARU
+  vehicleFilter?: VehicleFilterProps
 }
 
 function MapAutoResize() {
   const map = useMap()
   useEffect(() => {
-    setTimeout(() => map.invalidateSize(), 0)
+    const handleResize = () => {
+      map.invalidateSize()
+    }
+    const t1 = setTimeout(handleResize, 50)
+    const t2 = setTimeout(handleResize, 300)
+    window.addEventListener('resize', handleResize)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      window.removeEventListener('resize', handleResize)
+    }
   }, [map])
   return null
 }
@@ -70,6 +89,7 @@ export default function OptimizeResultMap({
   vehicleRoutes,
   highlightedVehicleId,
   showOnlyHighlighted = false, // Default false
+  vehicleFilter,
 }: Props) {
   const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
 
@@ -101,7 +121,7 @@ export default function OptimizeResultMap({
   return (
     <div className='relative w-full h-full'>
       {/* Sembunyikan Legend jika sedang mode isolasi (export PDF) */}
-      {!showOnlyHighlighted && <MapLegend />}
+      {!showOnlyHighlighted && <MapLegend vehicleFilter={vehicleFilter} />}
 
       <MapContainer
         center={center}
