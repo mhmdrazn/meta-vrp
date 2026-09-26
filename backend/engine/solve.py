@@ -455,7 +455,7 @@ def solve(
             best_dmap = dict(cur_dmap)
             best_fit = cur_fit
 
-            from .algorithms.alns import destroy_random, destroy_worst, destroy_shaw
+            from .algorithms.alns import destroy_random, destroy_shaw, destroy_worst
 
             destroys = [destroy_random, destroy_worst, destroy_shaw]
             dw = [1.0] * len(destroys)

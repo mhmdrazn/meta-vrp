@@ -20,13 +20,11 @@ Key notebook references: ``run_hybrid()``, ``repair_aco_guided()``.
 from __future__ import annotations
 
 import logging
-import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from ..construct import greedy_construct
 from ..data import Node, TimeMatrix
 from ..evaluation import route_time_minutes
 from ..objective import ObjectiveWeights, search_objective
@@ -41,8 +39,6 @@ from ..utils import (
 
 # Re-use destroy operators and standard repair from alns.py
 from .alns import (
-    DestroyOp,
-    RepairOp,
     _rebalance_solution,
     destroy_longest,
     destroy_random,

@@ -17,21 +17,17 @@ from __future__ import annotations
 import logging
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-
-import numpy as np
 
 from ..data import Node, TimeMatrix
 from ..evaluation import route_time_minutes
 from ..objective import ObjectiveWeights, search_objective
 from ..utils import (
-    build_groups_from_expanded_ids,
     deepcopy_routes,
     ensure_all_routes_capacity,
     ensure_groups_single_vehicle,
     set_seed,
-    weighted_choice,
 )
 
 log = logging.getLogger(__name__)

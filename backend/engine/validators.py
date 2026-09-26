@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, List
 
-from .data import Node, TimeMatrix
+from .data import Node
 from .evaluation import capacity_trace_and_violations
 
 

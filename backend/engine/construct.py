@@ -239,10 +239,10 @@ def build_initial_solution(
 ) -> Tuple[List[List[str]], Dict[int, Dict[str, float]]]:
     """Build initial solution using notebook cell 30 logic."""
     import random
+
     from .evaluation import (
         evaluate_route,
         rebuild_route_with_refills,
-        rebuild_routes_from_dmap,
     )
 
     rng = random.Random(seed)
