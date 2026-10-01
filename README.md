@@ -1,575 +1,509 @@
-# 🚛 Armada Hijau: Website Optimasi Rute Mobil Penyiram Taman
+# Meta-VRP: Park Watering Route Optimization
 
-[![CI Status](https://github.com/jasonnho/meta-vrp/actions/workflows/ci_quality.yml/badge.svg)](https://github.com/jasonnho/meta-vrp/actions/workflows/ci_quality.yml)
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![React](https://img.shields.io/badge/React-18-cyan)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+Meta-VRP is a decision-support system that plans daily watering routes for a fleet of water-tanker trucks serving urban parks. Given a depot, a set of parks with water demand, and a network of refill stations, it assigns parks to trucks and sequences each route so that all demand is served within the operating window.
 
-**Meta-VRP** adalah aplikasi *Capstone Project* yang dirancang untuk mengoptimalkan rute penyiraman taman kota menggunakan algoritma **Adaptive Large Neighborhood Search (ALNS)**. Sistem ini membantu meminimalkan jarak tempuh armada, menyeimbangkan beban kerja, dan mengelola kebutuhan air (demand) secara efisien dengan data real-world routing.
+The routing engine combines **Ant Colony Optimization (ACO)** and **Adaptive Large Neighborhood Search (ALNS)** and works on real road-network travel times from OSRM. A React web application lets operators choose a planning budget, run the optimizer, and inspect the resulting routes on an interactive map.
 
 ---
 
-## ✨ Fitur Utama
+## Table of Contents
 
-### 🧠 Algoritma Cerdas (Backend)
-* **Engine ALNS:** Menggunakan heuristik *destroy* dan *repair* adaptif untuk mencari solusi rute mendekati optimal
-* **Multi-Constraint:** Memperhitungkan kapasitas tangki air, jendela waktu (opsional), dan lokasi pengisian ulang (*refill stations*)
-* **Real-World Distance:** Integrasi dengan **OSRM (Open Source Routing Machine)** untuk kalkulasi jarak dan waktu tempuh nyata (bukan Euclidean)
-* **Adaptive Learning:** Bobot operator destroy/repair menyesuaikan berdasarkan performa historis
-
-### 🖥️ Antarmuka Modern (Frontend)
-* **Peta Interaktif:** Visualisasi rute menggunakan **React Leaflet** dengan ikon kustom (Pohon, Rumah, Droplet)
-* **Indikator Demand:** Visualisasi warna taman (Hijau/Kuning/Merah) berdasarkan volume kebutuhan air
-* **Route Highlight:** Fitur isolasi rute per kendaraan untuk analisis mendalam
-* **Laporan PDF Generatif:** Ekspor laporan profesional otomatis yang memisahkan detail rute per halaman
-* **Real-time Optimization:** Progress tracking selama proses optimasi berjalan
-
----
-
-## 🛠️ Tech Stack
-
-**Frontend:**
-* **Framework:** React 18 + Vite (TypeScript 5.0)
-* **Styling:** Tailwind CSS + Shadcn/UI
-* **State Management:** Zustand + TanStack Query
-* **Maps:** React Leaflet + OSRM API
-* **Visuals:** Framer Motion, Lucide React
-* **PDF Generation:** jsPDF
-
-**Backend:**
-* **Framework:** FastAPI (Python 3.10+)
-* **Computation:** NumPy, Pandas
-* **Database:** PostgreSQL — [Supabase](https://supabase.com) (direkomendasikan) atau PostgreSQL lokal/Docker
-* **ORM:** SQLAlchemy + Psycopg (v3)
-* **Routing API:** OSRM Integration
-
-**DevOps & Quality Assurance:**
-* **CI/CD:** GitHub Actions
-* **Linter/Formatter:** Ruff, Black (Backend) | ESLint, Prettier (Frontend)
-* **Hooks:** Pre-commit hooks untuk code quality
-* **Containerization:** Docker & Docker Compose ready
+- [Key Features](#key-features)
+- [How It Works](#how-it-works)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Datasets and Data Pipeline](#datasets-and-data-pipeline)
+- [Experiments and Reproducibility](#experiments-and-reproducibility)
+- [Deployment](#deployment)
+- [Development Workflow](#development-workflow)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
 
 ---
 
-## 🚀 Panduan Instalasi (Local Development)
+## Key Features
 
-### Prasyarat
-* **Node.js** v18+
-* **Python** v3.10+
-* **PostgreSQL** v14+ (atau Docker)
-* **Git**
+**Optimization engine**
 
-### 📦 Quick Start
+- Three metaheuristics behind one interface: ACO, standard ALNS, and a Hybrid ALNS + ACO (the default in the web application).
+- Capacity-aware planning with automatic refill-station visits, split deliveries for parks whose demand exceeds one tank, and an operating-window constraint.
+- Time-budgeted search: the solver keeps improving for exactly the requested wall-clock budget, so a longer budget buys more search effort.
+- Real-world travel times from precomputed OSRM time matrices, not straight-line distances.
+- Reproducible runs through an explicit random seed.
+
+**Web application**
+
+- Interactive Leaflet map with demand-coded parks, depot, refill stations, and per-vehicle route colors.
+- **Planning modes**: Rapid (5 s), Standard (10 s), and Extended (20 s) computation budgets.
+- Configurable fleet size (3 to 10 trucks) and a choice of service area (dataset).
+- Decision-oriented result summary: makespan, total fleet operating time, vehicles assigned, feasibility, workload balance, refill visits, and planning time.
+- Route details table with per-vehicle show/hide controls, so routes can be inspected one at a time or in any combination.
+- Live progress for each stage (optimization, road-geometry generation, visualization) with measured timings.
+- PDF report export with one page per vehicle route.
+- Light and dark themes, responsive layout.
+
+**Research support**
+
+- Pre-computed experiment results (algorithm baseline, vehicle availability, refill availability) served through the API and visualized in the application.
+- Notebooks for re-running every experiment, including runtime-budget comparisons across matched seeds.
+
+---
+
+## How It Works
+
+### Problem definition
+
+The problem is a capacitated vehicle routing problem with split deliveries, intermediate refills, and a shared time window:
+
+| Element | Description |
+| --- | --- |
+| Depot | Single start and end point for every truck. |
+| Parks | Customers with a water demand in liters. Demand larger than a tank is split across visits. |
+| Refill stations | Locations where an empty truck refills (5 min service). Trucks start with an initial fill at the nearest station. |
+| Trucks | Homogeneous fleet, 5,000 L tank capacity. |
+| Operating window | 540 minutes (06:00 to 15:00), including the return to the depot. |
+| Service time | 20 min for a full 5,000 L delivery, scaled proportionally for partial deliveries. |
+
+### Objective
+
+The search minimizes a penalized objective that favors short, balanced, feasible plans:
+
+```text
+fitness = total_time
+        + 2.0 * refill_visits
+        + 0.1 * std(route_times)
+        + penalty * (unserved demand + time-window violations + empty trucks)
+```
+
+Hard-constraint violations carry a very large penalty (10^6), so any feasible plan outranks any infeasible one.
+
+### Algorithms
+
+| Algorithm | Summary |
+| --- | --- |
+| **ACO** | Ants construct complete delivery plans guided by pheromone trails and travel-time heuristics. Trails evaporate each iteration and are reinforced by the iteration-best and global-best plans. |
+| **ALNS** | Starts from a greedy construction, then repeatedly destroys part of the plan (random, worst, related removal) and repairs it (greedy or regret insertion). Operator weights adapt to their success, and simulated annealing decides acceptance. |
+| **Hybrid ALNS + ACO** | The ALNS loop with an additional pheromone-guided repair operator. Pheromone is seeded from the initial plan and reinforced whenever a new best solution is found, so the search learns which edges tend to appear in good plans. |
+
+All three share the same evaluation function, which keeps comparisons fair.
+
+### Planning modes
+
+The planning mode is a **computation budget**, not a quality label. The solver loops until the budget is spent and returns the best plan found.
+
+| Mode | Budget | Intended use |
+| --- | --- | --- |
+| Rapid | 5 s | Fast response, quick what-if checks. |
+| Standard | 10 s | Balanced search. |
+| Extended | 20 s | Longer search for higher-quality plans. |
+
+Total wait time is the budget plus a small overhead for data loading, post-processing, and network transfer.
+
+### Result metrics
+
+| Metric | Meaning |
+| --- | --- |
+| Makespan | Completion time of the longest route, that is, when the last truck is back at the depot. |
+| Total fleet operating time | Sum of all active route durations. |
+| Vehicles assigned | Active trucks out of the fleet size requested. |
+| Operationally feasible | Whether every park is fully served within the operating window. |
+| Workload Std Dev | Standard deviation of route durations. Lower values mean a more even workload across trucks. |
+| Refill visits | Total refill-station stops across all routes. |
+| Planning time | Measured computation time of the solver. |
+
+---
+
+## Architecture
+
+```text
+┌──────────────────────────┐        ┌───────────────────────────────┐
+│  React + Vite frontend   │  HTTP  │  FastAPI backend              │
+│  - Leaflet map           │ ─────▶ │  - /optimize  (stateless)     │
+│  - Planning controls     │ ◀───── │  - /nodes, /datasets          │
+│  - Results and reports   │  JSON  │  - /experiments               │
+└────────────┬─────────────┘        └───────────────┬───────────────┘
+             │                                      │
+             │ road geometry                        │ loads
+             ▼                                      ▼
+   ┌────────────────────┐              ┌───────────────────────────┐
+   │  OSRM (public API) │              │  Dataset JSON + NPY       │
+   └────────────────────┘              │  (nodes, time matrices)   │
+                                       └───────────────────────────┘
+```
+
+**Request flow.** The browser sends the selected parks, fleet size, dataset, and time budget to `POST /optimize`. The backend loads the dataset and its time matrix, builds an initial solution, runs the chosen algorithm for the requested budget, and returns routes with their metrics. The browser then requests road geometry from OSRM to draw the routes on the map.
+
+**Deployment modes.** The backend runs in one of two modes, controlled by `DEMO_MODE`:
+
+| Mode | Behavior |
+| --- | --- |
+| `DEMO_MODE=1` (default) | Stateless public demo. Serves only `/optimize`, `/nodes`, `/datasets`, `/experiments`, and `/health`. No database is required or touched. |
+| `DEMO_MODE=0` | Operational stack. Additionally mounts database-backed routers (catalog, groups, assignment, field status, history) and requires `DATABASE_URL`. |
+
+The web application targets the demo mode. Operational pages exist in the router but are not linked in the current interface.
+
+---
+
+## Technology Stack
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 3, shadcn/ui (Radix UI), Framer Motion, React Router 7 |
+| State and data | Zustand, TanStack Query, Axios |
+| Mapping | Leaflet, React Leaflet, OSRM |
+| Reporting | jsPDF, html2canvas |
+| Backend | Python 3.10+, FastAPI, Pydantic, NumPy, pandas, Uvicorn |
+| Persistence (operational mode only) | PostgreSQL (Supabase recommended), SQLAlchemy |
+| Quality tooling | Black, Ruff, ESLint, Prettier, pre-commit, GitHub Actions |
+| Hosting | Vercel (static frontend and Python serverless function) |
+
+---
+
+## Project Structure
+
+```text
+meta-vrp/
+├── api/
+│   └── index.py              # Vercel serverless entry; mounts the FastAPI app under /api
+├── backend/
+│   ├── app.py                # FastAPI application and mode switching
+│   ├── settings.py           # Environment-driven configuration
+│   ├── schemas.py            # Request and response models
+│   ├── engine/               # Optimization core
+│   │   ├── solve.py          # Unified solve() entry point for all algorithms
+│   │   ├── algorithms/       # aco.py, alns.py, hybrid.py
+│   │   ├── construct.py      # Greedy initial-solution construction
+│   │   ├── evaluation.py     # Route timing and feasibility evaluation
+│   │   ├── objective.py      # Shared search objective
+│   │   ├── io_utils.py       # Dataset registry and loading
+│   │   └── ...
+│   ├── routers/              # optimize.py (demo) plus operational routers
+│   ├── migrations/           # SQL for operational mode
+│   └── data/                 # Dataset JSON/NPY and pre-computed experiment results
+├── data/                     # Source CSV datasets and time matrices
+├── frontend/
+│   └── src/
+│       ├── pages/            # OptimizePage, ResultsPage, and operational pages
+│       ├── components/       # Maps, legend, and UI primitives (shadcn/ui)
+│       ├── stores/           # Zustand stores
+│       ├── lib/              # API client, formatting, color utilities
+│       └── layouts/          # Application shell
+├── scripts/                  # Dataset conversion and time-matrix generation
+├── requirements.txt          # Production (demo) Python dependencies
+├── vercel.json               # Build, routing, and function configuration
+└── .pre-commit-config.yaml   # Local quality hooks
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or newer
+- Node.js 18 or newer
+- Git
+
+### 1. Clone the repository
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/jasonnho/meta-vrp.git
+git clone https://github.com/mhmdrazn/meta-vrp.git
 cd meta-vrp
-
-# 2. Setup database (pilih salah satu metode di bawah)
-# 3. Setup backend
-# 4. Setup frontend
 ```
 
----
+### 2. Start the backend
 
-## 🗃️ Setup Database (Pilih Salah Satu)
-
-### 🐳 Opsi A — PostgreSQL via Docker (Direkomendasikan)
+Run all backend commands from the **repository root**, because the application is imported as `backend.app`.
 
 ```bash
-# Jalankan PostgreSQL 16 di port 5432
-docker run --name meta-vrp-pg \
-  -e POSTGRES_DB=meta_vrp \
-  -e POSTGRES_USER=meta \
-  -e POSTGRES_PASSWORD=dev \
-  -p 5432:5432 \
-  -v meta_vrp_pgdata:/var/lib/postgresql/data \
-  -d postgres:16
-```
-
-**Jalankan Migrasi Database** (dua file, urut — `001_init_schema.sql` membuat tabel dasar, `schema_additions.sql` menambah kolom/tabel pendukung):
-
-**Cara 1 — Copy file ke container lalu eksekusi**
-
-```bash
-# Dari root repository
-docker cp backend/migrations/001_init_schema.sql meta-vrp-pg:/001_init_schema.sql
-docker cp backend/migrations/schema_additions.sql meta-vrp-pg:/schema_additions.sql
-
-docker exec -it meta-vrp-pg psql -U meta -d meta_vrp -f /001_init_schema.sql
-docker exec -it meta-vrp-pg psql -U meta -d meta_vrp -f /schema_additions.sql
-# Password: dev
-```
-
-**Cara 2 — One-off container (tanpa copy)**
-
-```bash
-# macOS / Linux:
-docker run --rm -i --network host \
-  -v "$(pwd)/backend/migrations:/migrations" postgres:16 \
-  psql -h localhost -U meta -d meta_vrp -f /migrations/001_init_schema.sql
-docker run --rm -i --network host \
-  -v "$(pwd)/backend/migrations:/migrations" postgres:16 \
-  psql -h localhost -U meta -d meta_vrp -f /migrations/schema_additions.sql
-
-# Windows PowerShell:
-docker run --rm -i --network host `
-  -v "${PWD}\backend\migrations:/migrations" postgres:16 `
-  psql -h localhost -U meta -d meta_vrp -f /migrations/001_init_schema.sql
-docker run --rm -i --network host `
-  -v "${PWD}\backend\migrations:/migrations" postgres:16 `
-  psql -h localhost -U meta -d meta_vrp -f /migrations/schema_additions.sql
-# Password: dev
-```
-
----
-
-### 🖥️ Opsi B — PostgreSQL Native (tanpa Docker)
-
-1. **Install PostgreSQL** (v14–v16)
-2. **Buat user & database:**
-
-```sql
-CREATE USER meta WITH PASSWORD 'dev';
-CREATE DATABASE meta_vrp OWNER meta;
-GRANT ALL PRIVILEGES ON DATABASE meta_vrp TO meta;
-```
-
-3. **Jalankan migrasi:**
-
-```bash
-psql "postgresql://meta:dev@localhost:5432/meta_vrp" \
-  -f backend/migrations/001_init_schema.sql
-psql "postgresql://meta:dev@localhost:5432/meta_vrp" \
-  -f backend/migrations/schema_additions.sql
-```
-
-> 💡 **Tips:** Kedua file SQL migration menggunakan `IF NOT EXISTS` sehingga aman dijalankan berulang kali.
-
----
-
-### ☁️ Opsi C — Supabase (direkomendasikan untuk produksi/deploy)
-
-1. Buat project baru di [supabase.com](https://supabase.com) (gratis untuk mulai).
-2. Buka **Project Settings > Database > Connection string**, salin dua jenis URI:
-   - **Session pooler** (port `5432`) — untuk dev lokal / proses long-lived.
-   - **Transaction pooler** (port `6543`, host `...pooler.supabase.com`) — **wajib** dipakai saat backend di-deploy sebagai serverless function (mis. Vercel), supaya jumlah koneksi ke Postgres tidak membludak.
-3. Jalankan migrasi via **SQL Editor** di Supabase Dashboard: paste isi `backend/migrations/001_init_schema.sql`, jalankan, lalu paste isi `backend/migrations/schema_additions.sql`, jalankan.
-   - Atau via `psql` dari lokal:
-     ```bash
-     psql "<connection-string-supabase>" -f backend/migrations/001_init_schema.sql
-     psql "<connection-string-supabase>" -f backend/migrations/schema_additions.sql
-     ```
-4. Isi `DATABASE_URL` di `backend/.env` dengan connection string tersebut (lihat `backend/.env.example`). Kode backend ([database.py](backend/database.py)) otomatis mendeteksi host `pooler.supabase.com` dan menyesuaikan strategi pooling + `sslmode=require`.
-
----
-
-## ⚙️ Setup Backend (FastAPI)
-
-### 1. Buat Virtual Environment & Install Dependencies
-
-```bash
-cd backend
-
-# Buat virtual environment
 python -m venv .venv
 
-# Aktifkan environment
-# Windows PowerShell:
+# Windows (PowerShell)
 .\.venv\Scripts\Activate.ps1
-# macOS / Linux:
+# macOS / Linux
 source .venv/bin/activate
 
-# Install dependencies
 pip install -r requirements.txt
+python -m uvicorn backend.app:app --reload --port 8000
 ```
 
-> **Catatan:** Dependencies minimal yang diperlukan:
-> - `fastapi`, `uvicorn[standard]`
-> - `sqlalchemy`, `psycopg[binary]`
-> - `python-dotenv`, `pydantic`
-> - `numpy`, `pandas`
+The API is now available at `http://localhost:8000`, with interactive documentation at `http://localhost:8000/docs`.
 
-### 2. Konfigurasi Environment Variables
+### 3. Start the frontend
 
-Buat file `.env` di folder `backend/`:
-
-```env
-# Database Connection
-DATABASE_URL=postgresql+psycopg://meta:dev@localhost:5432/meta_vrp
-
-# Jika menggunakan psycopg2-binary:
-# DATABASE_URL=postgresql+psycopg2://meta:dev@localhost:5432/meta_vrp
-
-# CORS Settings
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-
-# Optional: OSRM Server
-# OSRM_SERVER=http://router.project-osrm.org
-```
-
-### 3. Jalankan Backend Server
+In a second terminal:
 
 ```bash
-uvicorn backend.app:app --reload --port 8000
-```
-
-✅ **Backend sekarang aktif di:** [http://localhost:8000](http://localhost:8000)
-📚 **API Documentation (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## 💻 Setup Frontend (React + Vite + TypeScript)
-
-### 1. Install Dependencies
-
-```bash
-cd ../frontend
+cd frontend
 npm install
-```
-
-### 2. Konfigurasi Environment Variables
-
-Untuk dev lokal, **biarkan `frontend/.env` kosong / tidak perlu dibuat** — Vite proxy di `vite.config.ts` sudah meneruskan `/api` ke backend lokal (`http://127.0.0.1:8000`).
-
-`VITE_API_BASE_URL` hanya perlu diisi saat build produksi di mana frontend & backend berjalan di domain terpisah (lihat bagian [Deploy ke Vercel](#-deploy-ke-vercel)):
-
-```env
-VITE_API_BASE_URL=https://meta-vrp-backend.vercel.app
-```
-
-### 3. Jalankan Development Server
-
-```bash
 npm run dev
 ```
 
-✅ **Frontend sekarang aktif di:** [http://localhost:5173](http://localhost:5173)
+Open `http://localhost:5173`. In development, Vite proxies `/api` to the backend at `http://127.0.0.1:8000`, so no frontend environment file is needed.
+
+### 4. Run your first plan
+
+1. Choose a **Study Area** and the **Number of Trucks**.
+2. Select a **Planning Mode** (5, 10, or 20 seconds).
+3. Click **Run Route Planning** and review the summary, map, and route details.
+
+### Operational mode (optional)
+
+Operational mode adds database-backed features and needs PostgreSQL.
+
+```bash
+pip install -r backend/requirements.txt
+
+# Create the schema (run in order). Use a plain PostgreSQL URI such as
+# postgresql://user:password@host:5432/dbname (without the "+psycopg2" driver suffix).
+psql "<postgres-uri>" -f backend/migrations/001_init_schema.sql
+psql "<postgres-uri>" -f backend/migrations/schema_additions.sql
+
+# Set DATABASE_URL in backend/.env (see Configuration), then start with:
+DEMO_MODE=0 python -m uvicorn backend.app:app --reload --port 8000
+```
+
+On PowerShell, set the variable first: `$env:DEMO_MODE = "0"`. Both migration files use `IF NOT EXISTS` and are safe to re-run. With Supabase, use the session pooler (port 5432) for local development and the transaction pooler (port 6543) for serverless deployments; the backend detects pooler hosts automatically.
 
 ---
 
-## 🛡️ Quality Assurance & Testing
+## Configuration
 
-Proyek ini menerapkan standar kualitas kode yang ketat dengan automated checks.
+### Backend environment variables
 
-### Setup Pre-commit Hooks (Wajib untuk Kontributor)
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DEMO_MODE` | `1` | `1` for the stateless demo, `0` for the operational stack. |
+| `CORS_ORIGINS` | `*` | Comma-separated list of allowed origins. |
+| `DATABASE_URL` | none | PostgreSQL connection string. Required only when `DEMO_MODE=0`. See `backend/.env.example`. |
 
-Kembali ke **root folder** proyek:
+Solver defaults (time limit, vehicle capacity, depot, refill service time, penalties) are defined in [`backend/settings.py`](backend/settings.py). The default time limit applies only when a request does not specify `time_limit_sec`.
+
+### Frontend environment variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | empty (`/api`) | Backend base URL. Set it only when frontend and backend are deployed on separate domains. |
+
+---
+
+## API Reference
+
+All paths below are relative to the backend root. When deployed on Vercel, prefix them with `/api`.
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Service status and active mode. |
+| `GET` | `/datasets` | Available datasets with node, park, and refill counts. |
+| `GET` | `/nodes?dataset_id=` | Depot, parks, and refill stations of a dataset. |
+| `POST` | `/optimize` | Run the optimizer and return routes and metrics. Stateless; nothing is stored. |
+| `GET` | `/experiments/{type}` | Pre-computed results. `type` is `baseline`, `scenario1`, or `scenario2`. Optional `dataset_id` filter. |
+| `GET` | `/experiments/{type}/assets` | List of available figures and route maps for an experiment. |
+| `GET` | `/experiment-assets/...` | Static figures and interactive route maps. |
+
+### `POST /optimize`
+
+Request:
+
+```json
+{
+  "dataset_id": "dataset_a",
+  "selected_node_ids": ["1", "2", "3"],
+  "num_vehicles": 7,
+  "algorithm": "alns_hybrid",
+  "time_limit_sec": 10,
+  "seed": 42
+}
+```
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `dataset_id` | string | `dataset_a` or `dataset_b`. Default `dataset_a`. |
+| `selected_node_ids` | string[] | Park IDs to serve. Required, at least one. |
+| `num_vehicles` | integer | Fleet size, at least 1. |
+| `algorithm` | string | `aco`, `alns_standard`, or `alns_hybrid` (default). |
+| `time_limit_sec` | number | Solver budget in seconds. Falls back to the server default. |
+| `seed` | integer | Random seed for reproducibility. Default 42. |
+| `refill_ids_override` | string[] | Restrict usable refill stations. Omit for all stations. |
+
+Response (abridged):
+
+```json
+{
+  "fitness": 2768.17,
+  "makespan": 427.1,
+  "total_time": 2617.04,
+  "route_time_std": 13.4,
+  "active_vehicles": 7,
+  "refill_visits": 73,
+  "computation_time": 10.02,
+  "feasible": true,
+  "algorithm": "alns_hybrid",
+  "routes": [
+    {
+      "vehicle_id": 0,
+      "sequence": ["0", "12", "45", "0"],
+      "total_time_min": 389.5,
+      "load_profile_liters": [5000, 3200, 0]
+    }
+  ]
+}
+```
+
+---
+
+## Datasets and Data Pipeline
+
+Two service areas in Surabaya, Indonesia, are included. They appear in the interface as **Service Area A** and **Service Area B**.
+
+| Service area | Dataset ID | Parks | Refill stations | Notes |
+| --- | --- | --- | --- | --- |
+| Service Area A | `dataset_a` | 46 | 41 | Baseline fleet of 10 trucks in experiments. |
+| Service Area B | `dataset_b` | 51 | 25 | Baseline fleet of 5 trucks in experiments. |
+
+Each dataset consists of a node file (`id`, `name`, `lat`, `lon`, `type`, `demand_liters`, `service_min`) and a pairwise travel-time matrix in minutes. Runtime files live in `backend/data/` as JSON plus NumPy arrays; the source CSVs live in `data/`.
+
+To add or rebuild a dataset:
+
+```bash
+# Build a travel-time matrix from node coordinates using OSRM
+python scripts/build_time_matrix.py --help
+
+# Convert CSV nodes and matrices into the runtime JSON + NPY format (validates the result)
+python scripts/convert_dataset.py --help
+```
+
+New datasets are registered in [`backend/engine/io_utils.py`](backend/engine/io_utils.py). Please respect the usage policy of the public OSRM demo server when generating matrices.
+
+---
+
+## Experiments and Reproducibility
+
+The study behind this project evaluates the three algorithms under several conditions. Pre-computed results are stored in `backend/data/experiments/`, served by the `/experiments` endpoints, and displayed on the **Results** page, available at the `/results` route.
+
+| Experiment | Question |
+| --- | --- |
+| Baseline comparison | How do ACO, ALNS, and Hybrid compare with full fleet and full refill availability? |
+| Vehicle availability | How does performance change as the available fleet shrinks? |
+| Refill availability | How does performance change when only 50% or 25% of refill stations are usable? |
+| Runtime budget | How do results change with 5 s, 10 s, and 20 s budgets? |
+
+Experiment protocol:
+
+- 20 independent runs per configuration with matched seeds (`7, 14, 21, ..., 140`), so algorithms are compared on identical starting conditions.
+- Metrics per run: fitness, total time, makespan, route-time standard deviation, active vehicles, refill visits, computation time, and feasibility.
+- The experiment notebooks live in a local `experiments/` directory that is excluded from version control. Their results are exported to CSV in `backend/data/experiments/`.
+
+> The public web application uses a shortened demonstration configuration. Results reported in the study were generated through controlled offline experiments.
+
+---
+
+## Deployment
+
+The repository deploys to **Vercel as a single project**: the frontend is built to static files, and the FastAPI app runs as a Python serverless function.
+
+How it is wired (see [`vercel.json`](vercel.json)):
+
+- `buildCommand` installs and builds the frontend into `frontend/dist`.
+- Requests to `/api/*` are rewritten to [`api/index.py`](api/index.py), which mounts the backend under `/api`.
+- All other paths fall back to `index.html` for client-side routing.
+- The function has `maxDuration` set to 60 seconds, which covers the longest planning mode plus overhead.
+
+Setup steps:
+
+1. Import the repository as a new Vercel project.
+2. Set **Framework Preset** to `Other` and keep **Root Directory** at the repository root.
+3. Leave build, output, and install commands on their defaults; `vercel.json` configures them.
+4. Deploy. The frontend is served at the project root and the API at `/api`.
+
+Production installs use the root [`requirements.txt`](requirements.txt), which intentionally excludes database packages. Because the frontend and backend share one origin, neither CORS settings nor `VITE_API_BASE_URL` are required. Confirm that your Vercel plan permits the configured function duration, and lower the time limit if it does not.
+
+---
+
+## Development Workflow
+
+### Quality checks
+
+```bash
+# Frontend
+cd frontend
+npm run lint
+npm run format
+npx tsc --noEmit
+
+# Backend (from the repository root)
+black backend --check
+ruff check backend
+
+# Everything
+pre-commit run --all-files
+```
+
+Install the hooks once to run these checks on every commit:
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
 
-*Ini akan memastikan kode Anda otomatis dicek setiap kali melakukan commit.*
+### Continuous integration
 
-### Menjalankan Pengecekan Manual
+GitHub Actions (`ci_quality.yml`) runs on every push and pull request to `main` and `dev`:
 
-**Frontend (Linting & Formatting):**
+- Frontend: Prettier check, ESLint, and TypeScript type check.
+- Backend: Black formatting check and Ruff linting.
 
-```bash
-cd frontend
-npm run lint      # Cek logic error dengan ESLint
-npm run format    # Perbaiki format otomatis (Prettier)
-```
+### Conventions
 
-**Backend (Linting & Formatting):**
-
-```bash
-cd backend
-black .           # Format kode otomatis
-ruff check .      # Cek logic error & code quality
-```
-
-**Cek Seluruh Proyek (Pre-commit):**
-
-```bash
-# Dari root folder
-pre-commit run --all-files
-```
+- Backend code follows Black (88 columns) and Ruff with isort rules; the frontend follows Prettier and ESLint.
+- Commit messages use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`).
 
 ---
 
-## 🐋 Docker Compose (Jalankan Semua Sekaligus)
+## Troubleshooting
 
-Untuk menjalankan seluruh stack (Database + Backend + Frontend) dengan satu perintah:
-
-### 1. Pastikan File `docker-compose.yml` Ada
-
-Buat file `docker-compose.yml` di root project:
-
-```yaml
-version: "3.9"
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: meta_vrp
-      POSTGRES_USER: meta
-      POSTGRES_PASSWORD: dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - meta_vrp_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meta -d meta_vrp"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    build: ./backend
-    environment:
-      DATABASE_URL: postgresql+psycopg://meta:dev@db:5432/meta_vrp
-      CORS_ORIGINS: http://localhost:5173
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
-    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - ./backend:/app
-
-  frontend:
-    build: ./frontend
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
-    depends_on:
-      - backend
-    ports:
-      - "5173:5173"
-    command: npm run dev -- --host 0.0.0.0
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-
-volumes:
-  meta_vrp_pgdata:
-```
-
-### 2. Build & Run
-
-```bash
-docker compose up --build
-```
-
-Semua service akan berjalan:
-- **Database:** `localhost:5432`
-- **Backend:** `localhost:8000`
-- **Frontend:** `localhost:5173`
-
-### 3. Stop Services
-
-```bash
-docker compose down
-# Atau dengan menghapus volumes:
-docker compose down -v
-```
+| Symptom | Likely cause | Resolution |
+| --- | --- | --- |
+| `ModuleNotFoundError: No module named 'backend'` | Uvicorn was started from inside `backend/`. | Run it from the repository root: `python -m uvicorn backend.app:app --reload`. |
+| `ERR_CONNECTION_REFUSED` on `/api/optimize` | Backend or Vite dev server is not running. | Start both servers; the frontend needs the backend on port 8000. |
+| Port 8000 or 5173 already in use | Another process holds the port. | Stop it, or start on another port (`--port 8001`; `npm run dev -- --port 5174`) and update the Vite proxy target. |
+| Route geometry loads slowly or as straight lines | The public OSRM demo server is rate limited or unreachable. | Retry later or host your own OSRM instance. Unreachable segments fall back to straight lines. |
+| Plan is marked not feasible with few trucks | Total workload does not fit the 540-minute window at that fleet size. | Increase the number of trucks. |
+| `DATABASE_URL` error on startup | `DEMO_MODE=0` without a database. | Set `DATABASE_URL`, or use `DEMO_MODE=1`. |
+| `npm install` fails | Unsupported Node version. | Use Node.js 18 or newer. |
 
 ---
 
-## ☁️ Deploy ke Vercel (Monorepo — Satu Project)
+## Contributing
 
-Frontend (Vite) dan backend (FastAPI) di-deploy sebagai **satu project Vercel** dari repo ini. Database memakai Supabase (lihat [Opsi C — Supabase](#️-opsi-c--supabase-direkomendasikan-untuk-produksi-deploy) di atas).
+Contributions are welcome.
 
-Cara kerjanya (lihat [`vercel.json`](vercel.json)):
-- `buildCommand` men-build frontend (`frontend/dist`) sebagai output statis.
-- Request ke `/api/*` di-rewrite ke serverless function [`api/index.py`](api/index.py) (harus di top-level folder `api/` — syarat Vercel), yang me-mount FastAPI app asli ([`backend/app.py`](backend/app.py)) di bawah prefix `/api` — jadi rute asli seperti `/health`, `/optimize`, `/groups` otomatis bisa diakses lewat `/api/health`, `/api/optimize`, `/api/groups`, dst, cocok dengan yang dipanggil frontend ([`api.ts`](frontend/src/lib/api.ts)).
-- Request lainnya (selain `/api/*`) fallback ke `index.html` (SPA routing untuk React Router).
+1. Fork the repository and create a feature branch: `git checkout -b feat/short-description`.
+2. Install the pre-commit hooks (`pre-commit install`).
+3. Make your changes with clear, focused commits.
+4. Make sure the quality checks above pass locally.
+5. Open a pull request against `main` describing the change and how you verified it.
 
-### Langkah setup di Vercel Dashboard
-
-1. **Add New Project** → import repo ini.
-2. **Framework Preset**: `Other`.
-3. **Root Directory**: `./` (root repo) — **jangan** diisi `backend` atau `frontend`.
-4. **Build/Output/Install/Development Command**: biarkan toggle "Override" mati — semuanya sudah diatur lewat `vercel.json`.
-5. Environment Variables (Project Settings → Environment Variables):
-   - `DATABASE_URL` — connection string **Transaction pooler** Supabase (port `6543`), lihat [`backend/.env.example`](backend/.env.example).
-   - `CORS_ORIGINS` — **tidak wajib** untuk setup ini karena frontend & backend satu domain (same-origin, tidak kena CORS). Boleh dikosongkan/`*`.
-6. Deploy. Frontend ada di `https://<project>.vercel.app`, API di `https://<project>.vercel.app/api/...` (mis. `/api/health`, `/api/docs`).
-
-> ⚠️ **Catatan durasi & paket Vercel:** endpoint `/api/optimize` bisa berjalan sampai ~35 detik (`TIME_LIMIT_SEC` + buffer di [`settings.py`](backend/settings.py) & [`app.py`](backend/app.py)). `vercel.json` sudah men-set `maxDuration: 60`. Cek di Vercel Dashboard bahwa paket Anda mengizinkan durasi tsb (limit berubah dari waktu ke waktu — lihat [dokumentasi Function Duration Vercel](https://vercel.com/docs/functions/configuring-functions/duration) terkini). Jika dibatasi lebih rendah, turunkan `TIME_LIMIT_SEC` di `settings.py` agar tetap di bawah limit.
-
-> 💡 Karena satu domain, `frontend/.env` / `VITE_API_BASE_URL` **tidak perlu diisi** di production — default `/api` di [`api.ts`](frontend/src/lib/api.ts) sudah benar.
+Please keep documentation up to date when you change behavior, configuration, or the API.
 
 ---
 
-## 📂 Struktur Proyek
+## License
 
-```text
-meta-vrp/
-├── .github/
-│   └── workflows/          # CI/CD configuration (GitHub Actions)
-├── backend/
-│   ├── engine/             # ALNS Algorithm Core
-│   │   ├── alns_solver.py  # Main ALNS implementation
-│   │   ├── operators.py    # Destroy & Repair operators
-│   │   └── utils.py        # Helper functions
-│   ├── routers/            # FastAPI Endpoints
-│   │   ├── optimize.py     # Optimization endpoints
-│   │   └── data.py         # Data management endpoints
-│   ├── migrations/         # Database migrations
-│   │   └── schema_additions.sql
-│   ├── data/               # Dataset CSV
-│   │   ├── dataset_a.csv   # Dataset A Park locations & demands
-│   │   └── time_matrix_a.csv # OSRM distance matrix
-│   ├── app.py              # FastAPI application entry
-│   ├── requirements.txt    # Python dependencies
-│   └── .env                # Backend environment variables
-├── frontend/
-│   ├── src/
-│   │   ├── components/     # Reusable UI Components
-│   │   │   ├── Map/        # Map visualization components
-│   │   │   ├── Charts/     # Data visualization charts
-│   │   │   └── Tables/     # Data display tables
-│   │   ├── pages/          # Main Application Pages
-│   │   │   ├── Optimize.tsx
-│   │   │   ├── Logs.tsx
-│   │   │   └── Dashboard.tsx
-│   │   ├── stores/         # Zustand State Management
-│   │   ├── lib/            # Utility functions
-│   │   └── App.tsx         # Main application component
-│   ├── package.json        # Node.js dependencies
-│   ├── tsconfig.json       # TypeScript configuration
-│   ├── vite.config.ts      # Vite configuration
-│   └── .env                # Frontend environment variables
-├── .pre-commit-config.yaml # Pre-commit hooks configuration
-├── docker-compose.yml      # Docker orchestration
-└── README.md               # Project documentation (this file)
-```
+No license file is currently included in this repository, so all rights are reserved by the authors. Please contact the maintainers before reusing the code or data.
 
 ---
 
-## 🧩 Troubleshooting
+## Acknowledgements
 
-| Masalah | Penyebab | Solusi |
-|---------|----------|--------|
-| `psql: command not found` | PostgreSQL CLI belum terinstal | Gunakan Docker one-off container (Opsi A Cara 2) |
-| Backend gagal konek ke DB | `DATABASE_URL` salah atau DB belum running | Pastikan PostgreSQL aktif di `localhost:5432` |
-| CORS error di browser | Origin frontend belum diizinkan | Tambahkan `http://localhost:5173` di `CORS_ORIGINS` |
-| `Cannot find module '@/lib/...'` | Path alias tidak dikonfigurasi | Cek `tsconfig.json`: `"paths": { "@/*": ["src/*"] }` |
-| Port 8000 sudah digunakan | Service lain menggunakan port tersebut | Ubah port di `uvicorn` command: `--port 8001` |
-| `npm install` gagal | Node version tidak kompatibel | Gunakan Node.js v18 atau lebih baru |
-| Database migration gagal | Connection timeout | Tunggu hingga container PostgreSQL ready (15-30 detik) |
+- [OSRM](https://project-osrm.org/) for road-network routing.
+- [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors for map data and tiles.
+- [Leaflet](https://leafletjs.com/), [shadcn/ui](https://ui.shadcn.com/), and the FastAPI and React communities.
 
----
-
-## ⚡ Cheat Sheet (Quick Commands)
-
-```bash
-# ============================================
-# INITIAL SETUP
-# ============================================
-git clone https://github.com/jasonnho/meta-vrp.git
-cd meta-vrp
-
-# Database (Docker)
-docker run --name meta-vrp-pg \
-  -e POSTGRES_DB=meta_vrp -e POSTGRES_USER=meta -e POSTGRES_PASSWORD=dev \
-  -p 5432:5432 -v meta_vrp_pgdata:/var/lib/postgresql/data -d postgres:16
-
-# Run migration
-docker cp backend/migrations/schema_additions.sql meta-vrp-pg:/schema_additions.sql
-docker exec -it meta-vrp-pg psql -U meta -d meta_vrp -f /schema_additions.sql
-
-# Backend setup
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1  # Windows
-# source .venv/bin/activate    # macOS/Linux
-pip install -r requirements.txt
-echo "DATABASE_URL=postgresql+psycopg://meta:dev@localhost:5432/meta_vrp" > .env
-echo "CORS_ORIGINS=http://localhost:5173" >> .env
-
-# Frontend setup
-cd ../frontend
-npm install
-# (tidak perlu .env untuk dev lokal — pakai Vite proxy)
-
-# ============================================
-# DAILY DEVELOPMENT
-# ============================================
-# Terminal 1 (Backend)
-cd backend && source .venv/bin/activate
-uvicorn backend.app:app --reload --port 8000
-
-# Terminal 2 (Frontend)
-cd frontend
-npm run dev
-
-# ============================================
-# CODE QUALITY CHECKS
-# ============================================
-# Frontend
-cd frontend
-npm run lint && npm run format
-
-# Backend
-cd backend
-black . && ruff check .
-
-# All (from root)
-pre-commit run --all-files
-
-# ============================================
-# DOCKER COMPOSE
-# ============================================
-docker compose up --build    # Start all services
-docker compose down          # Stop all services
-docker compose logs -f       # View logs
-```
-
----
-
-## 🤝 Kontribusi
-
-Kami menerima kontribusi dari siapa saja! Ikuti panduan berikut:
-
-### Workflow Kontribusi
-
-1. **Fork** repository ini
-2. **Clone** fork Anda: `git clone https://github.com/YOUR_USERNAME/meta-vrp.git`
-3. **Buat branch** fitur: `git checkout -b feature/nama-fitur-anda`
-4. **Install pre-commit hooks:** `pre-commit install`
-5. **Commit** perubahan: `git commit -m "feat: deskripsi fitur"`
-6. **Push** ke branch: `git push origin feature/nama-fitur-anda`
-7. **Buat Pull Request** ke branch `main`
-
-### Standar Kualitas
-
-* ✅ Semua commit **harus** lolos pre-commit checks
-* ✅ Pipeline CI di GitHub harus **hijau (Passed)**
-* ✅ Gunakan conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`
-* ✅ Tambahkan tests untuk fitur baru (jika applicable)
-* ✅ Update dokumentasi jika ada perubahan API atau fitur
-
----
-
-## 📄 License
-
-Proyek ini dilisensikan di bawah **MIT License**. Lihat file [LICENSE](LICENSE) untuk detail lengkap.
-
----
-
-## 👥 Tim Pengembang
-
-**Meta-VRP Project** — Capstone Project 2025
-
-* Algorithm Design & Backend Development
-* Frontend Development & UI/UX
-* DevOps & Infrastructure
-
----
-
-## 📞 Kontak & Support
-
-* **Repository:** [github.com/jasonnho/meta-vrp](https://github.com/jasonnho/meta-vrp)
-* **Issues:** [GitHub Issues](https://github.com/jasonnho/meta-vrp/issues)
-* **Discussions:** [GitHub Discussions](https://github.com/jasonnho/meta-vrp/discussions)
-
----
-
-© 2025 Meta-VRP Project. All rights reserved.
+Repository: [github.com/mhmdrazn/meta-vrp](https://github.com/mhmdrazn/meta-vrp) · Issues: [GitHub Issues](https://github.com/mhmdrazn/meta-vrp/issues)
