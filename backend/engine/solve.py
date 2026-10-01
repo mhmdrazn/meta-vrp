@@ -361,6 +361,24 @@ def _rebalance_solution_dmap(
 # ---------------------------------------------------------------------------
 # Universal solve() entry point
 # ---------------------------------------------------------------------------
+def _budget_loop(time_limit_sec: float, max_iter: Optional[int] = None):
+    """Yield iteration indices until the wall-clock budget is used up.
+
+    An explicit ``max_iter`` (e.g. from an experiment config) takes precedence;
+    otherwise the search keeps iterating for the whole ``time_limit_sec`` so a
+    larger planning budget really buys more search effort.
+    """
+    t_start = time.perf_counter()
+    it = 0
+    while (
+        it < max_iter
+        if max_iter is not None
+        else time.perf_counter() - t_start < time_limit_sec
+    ):
+        yield it
+        it += 1
+
+
 def solve(
     nodes: Dict[str, Node],
     tm: TimeMatrix,
@@ -432,7 +450,7 @@ def solve(
         park_set = set(park_ids)
 
         if algorithm == "alns_standard":
-            max_iter = alns_cfg.max_iter if (alns_cfg and alns_cfg.max_iter) else 200
+            max_iter = alns_cfg.max_iter if (alns_cfg and alns_cfg.max_iter) else None
             # Run ALNS on delivery_map
             rng = random.Random(seed)
             set_seed(seed)
@@ -466,7 +484,7 @@ def solve(
             rc = [0] * 2
             T = 100.0
 
-            for it in range(max_iter):
+            for it in _budget_loop(time_limit_sec, max_iter):
                 di = weighted_choice(dw, rng)
                 ri_ = weighted_choice(rw, rng)
                 k = rng.randint(1, max(2, len(park_ids) // 4))
@@ -620,7 +638,7 @@ def solve(
             final_dmap = best_dmap
 
         elif algorithm == "aco":
-            max_iter = aco_cfg.max_iter if (aco_cfg and aco_cfg.max_iter) else 200
+            max_iter = aco_cfg.max_iter if (aco_cfg and aco_cfg.max_iter) else None
             alpha = aco_cfg.alpha if aco_cfg else 1.0
             beta = aco_cfg.beta if aco_cfg else 2.0
             rho = aco_cfg.rho if aco_cfg else 0.1
@@ -648,7 +666,7 @@ def solve(
             )
             init_overhead = tm.travel(depot_id, init_r) + 5.0
 
-            for it in range(max_iter):
+            for it in _budget_loop(time_limit_sec, max_iter):
                 iter_best_fit = float("inf")
                 iter_best = None
                 for _ in range(20):
@@ -853,7 +871,7 @@ def solve(
 
         else:  # alns_hybrid
             max_iter = (
-                hybrid_cfg.max_iter if (hybrid_cfg and hybrid_cfg.max_iter) else 200
+                hybrid_cfg.max_iter if (hybrid_cfg and hybrid_cfg.max_iter) else None
             )
             alpha = hybrid_cfg.alpha if hybrid_cfg else 1.0
             beta = hybrid_cfg.beta if hybrid_cfg else 2.0
@@ -882,7 +900,7 @@ def solve(
             rw = [1.0, 1.0, 1.0]
             T = 100.0
 
-            for it in range(max_iter):
+            for it in _budget_loop(time_limit_sec, max_iter):
                 di = weighted_choice(dw, rng)
                 ri_ = weighted_choice(rw, rng)
                 k = rng.randint(1, max(2, len(park_ids) // 4))
@@ -1084,10 +1102,15 @@ def solve(
             )
             final_dmap = best_dmap
 
-        # Rebalance
-        routes, final_dmap = _rebalance_solution_dmap(
+        # Rebalance — keep the rebalanced plan only if it is not worse, so a larger
+        # time budget can never end up with a worse final result than a smaller one.
+        pre_fit = evaluate_solution(routes, nodes, tm, delivery_map=final_dmap)[0]
+        reb_routes, reb_dmap = _rebalance_solution_dmap(
             final_dmap, num_vehicles, nodes, tm, depot_id, refill_ids, vehicle_capacity
         )
+        reb_fit = evaluate_solution(reb_routes, nodes, tm, delivery_map=reb_dmap)[0]
+        if reb_fit <= pre_fit:
+            routes, final_dmap = reb_routes, reb_dmap
 
         obj_fitness, feasible = evaluate_solution(
             routes, nodes, tm, delivery_map=final_dmap

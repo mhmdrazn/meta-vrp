@@ -55,6 +55,7 @@ import {
     ListChecks,
     MapPin,
     CheckCircle2,
+    Circle,
     AlertCircle,
     ListTree,
     FileDown,
@@ -125,6 +126,11 @@ export default function OptimizePage() {
     const { toast } = useToast();
     const { lastResult, lastPayload, setLastResult, clearLastResult } = useOptimizeMem();
     const [progress, setProgress] = useState(0);
+    const optStartRef = useRef<number | null>(null);
+    const [optWallMs, setOptWallMs] = useState<number | null>(null);
+    const [routeProgress, setRouteProgress] = useState({ done: 0, total: 0 });
+    const [routeTiming, setRouteTiming] = useState<{ start: number; end: number | null } | null>(null);
+    const [now, setNow] = useState(() => performance.now());
 
     const {
         mutate,
@@ -134,6 +140,9 @@ export default function OptimizePage() {
     } = useMutation({
         mutationFn: (payload: any) => Api.optimize(payload),
         onSuccess: (res, variables) => {
+            if (optStartRef.current != null) {
+                setOptWallMs(performance.now() - optStartRef.current);
+            }
             setLastResult(res, {
                 num_vehicles: variables?.num_vehicles,
                 selected_node_ids: variables?.selected_node_ids ?? [],
@@ -151,6 +160,7 @@ export default function OptimizePage() {
 
     const handleDatasetChange = (newId: string) => {
         if (newId === datasetId) return;
+        resetRunTiming();
         setDatasetId(newId);
         clearLastResult();
         setVehicleRoutes({});
@@ -159,8 +169,17 @@ export default function OptimizePage() {
         resetOptimize();
     };
 
+    const resetRunTiming = () => {
+        setOptWallMs(null);
+        setRouteProgress({ done: 0, total: 0 });
+        setRouteTiming(null);
+        setIsFetchingRoutes(false);
+    };
+
     const handleRun = () => {
         const node_ids = parks.map((p) => p.id);
+        resetRunTiming();
+        optStartRef.current = performance.now();
         setVehicleRoutes({});
         setHighlightedVehicleId(null);
         setSelectedVehicleIds(new Set());
@@ -175,6 +194,8 @@ export default function OptimizePage() {
     };
 
     const handleClearResult = () => {
+        resetRunTiming();
+        optStartRef.current = null;
         clearLastResult();
         setVehicleRoutes({});
         setHighlightedVehicleId(null);
@@ -208,41 +229,81 @@ export default function OptimizePage() {
     };
 
     useEffect(() => {
-        if (data && nodesById.size > 0) {
-            const fetchGeometries = async () => {
-                setIsFetchingRoutes(true);
-                setVehicleRoutes({});
-                const newRoutes: Record<number, Geometry[]> = {};
-                for (const route of data.routes) {
-                    const vehId = route.vehicle_id;
-                    newRoutes[vehId] = [];
-                    for (let i = 0; i < route.sequence.length - 1; i++) {
-                        const idA = route.sequence[i].split("#")[0];
-                        const idB = route.sequence[i + 1].split("#")[0];
-                        const nodeA = nodesById.get(idA);
-                        const nodeB = nodesById.get(idB);
-                        if (nodeA && nodeB) {
-                            try {
-                                const geometry = await Api.getRouteGeometry(
-                                    nodeA.lon, nodeA.lat, nodeB.lon, nodeB.lat,
-                                );
-                                newRoutes[vehId].push(geometry);
-                                setVehicleRoutes((prev) => ({
-                                    ...prev,
-                                    [vehId]: [...newRoutes[vehId]],
-                                }));
-                                await sleep(50);
-                            } catch (err) {
-                                console.error(`Route segment ${idA}->${idB} failed`, err);
-                            }
-                        }
-                    }
-                }
-                setIsFetchingRoutes(false);
-            };
-            fetchGeometries();
+        if (!data || nodesById.size === 0) return;
+        let cancelled = false;
+
+        const CHUNK_WAYPOINTS = 25;
+        const CONCURRENCY = 4;
+        type Task = { vehId: number; slot: number; coords: [number, number][] };
+        const tasks: Task[] = [];
+        const slotCounts: Record<number, number> = {};
+
+        for (const route of data.routes) {
+            const points: [number, number][] = [];
+            for (const raw of route.sequence) {
+                const node = nodesById.get(raw.split("#")[0]);
+                if (!node) continue;
+                const last = points[points.length - 1];
+                if (last && last[0] === node.lon && last[1] === node.lat) continue;
+                points.push([node.lon, node.lat]);
+            }
+            let slot = 0;
+            for (let i = 0; i < points.length - 1; i += CHUNK_WAYPOINTS - 1) {
+                tasks.push({
+                    vehId: route.vehicle_id,
+                    slot: slot++,
+                    coords: points.slice(i, i + CHUNK_WAYPOINTS),
+                });
+            }
+            slotCounts[route.vehicle_id] = slot;
         }
+        const total = tasks.reduce((n, t) => n + t.coords.length - 1, 0);
+
+        const run = async () => {
+            const start = performance.now();
+            setIsFetchingRoutes(true);
+            setVehicleRoutes({});
+            setRouteProgress({ done: 0, total });
+            setRouteTiming({ start, end: null });
+
+            const slots: Record<number, (Geometry | undefined)[]> = {};
+            for (const [vid, n] of Object.entries(slotCounts)) {
+                slots[Number(vid)] = new Array(n).fill(undefined);
+            }
+
+            let next = 0;
+            const worker = async () => {
+                while (!cancelled) {
+                    const task = tasks[next++];
+                    if (!task) return;
+                    const geometry = await Api.getRouteGeometryPath(task.coords);
+                    if (cancelled) return;
+                    slots[task.vehId][task.slot] = geometry;
+                    setVehicleRoutes((prev) => ({
+                        ...prev,
+                        [task.vehId]: slots[task.vehId].filter((g): g is Geometry => !!g),
+                    }));
+                    setRouteProgress((p) => ({ ...p, done: p.done + task.coords.length - 1 }));
+                }
+            };
+            await Promise.all(
+                Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker),
+            );
+            if (cancelled) return;
+            setRouteTiming({ start, end: performance.now() });
+            setIsFetchingRoutes(false);
+        };
+        run();
+        return () => {
+            cancelled = true;
+        };
     }, [data, nodesById]);
+
+    useEffect(() => {
+        if (!isPending && !isFetchingRoutes) return;
+        const id = setInterval(() => setNow(performance.now()), 200);
+        return () => clearInterval(id);
+    }, [isPending, isFetchingRoutes]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setInterval> | undefined;
@@ -667,7 +728,7 @@ export default function OptimizePage() {
                                 <div className="space-y-2 pt-2 text-center">
                                     <Progress value={progress} className="w-full" />
                                     <p className="text-sm text-muted-foreground">
-                                        Estimated: ~{timeLimitSec}s
+                                        Optimizing… {optStartRef.current != null ? ((now - optStartRef.current) / 1000).toFixed(1) : "0.0"}s
                                     </p>
                                 </div>
                             )}
@@ -715,13 +776,87 @@ export default function OptimizePage() {
                         )}
                     </AnimatePresence>
 
-                    {isFetchingRoutes && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <Alert className="bg-muted/50">
-                                <Loader2 className="animate-spin h-4 w-4" />
-                                <AlertTitle>Loading road routes...</AlertTitle>
-                            </Alert>
-                        </motion.div>
+                    {/* Progress stages with measured times */}
+                    {(isPending || data) && (
+                        <Card>
+                            <CardContent className="py-3 space-y-2 text-xs sm:text-sm">
+                                {(() => {
+                                    const fmt = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+                                    const optElapsed =
+                                        optStartRef.current != null ? now - optStartRef.current : 0;
+                                    const optDone = !isPending && !!data;
+                                    const routesDone = !!routeTiming?.end;
+                                    const routeElapsed = routeTiming
+                                        ? (routeTiming.end ?? now) - routeTiming.start
+                                        : 0;
+                                    const { done, total } = routeProgress;
+                                    const remainingSec =
+                                        isFetchingRoutes && done >= 3 && done < total
+                                            ? Math.ceil(((routeElapsed / done) * (total - done)) / 1000)
+                                            : null;
+                                    type StageState = "idle" | "active" | "done";
+                                    const stageIcon = (state: StageState) =>
+                                        state === "done" ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                                        ) : state === "active" ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                                        ) : (
+                                            <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                                        );
+                                    const optState: StageState = optDone ? "done" : isPending ? "active" : "idle";
+                                    const routeState: StageState = routesDone
+                                        ? "done"
+                                        : isFetchingRoutes
+                                          ? "active"
+                                          : "idle";
+                                    return (
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                {stageIcon(optState)}
+                                                <span className={cn(optState === "idle" && "text-muted-foreground")}>
+                                                    {optDone ? "Optimization completed" : "Running optimization"}
+                                                </span>
+                                                <span className="ml-auto tabular-nums text-muted-foreground">
+                                                    {optDone
+                                                        ? fmt(optWallMs ?? (data?.computation_time ?? 0) * 1000)
+                                                        : isPending
+                                                          ? fmt(optElapsed)
+                                                          : ""}
+                                                </span>
+                                            </div>
+                                            {optDone && data?.computation_time != null && (
+                                                <p className="pl-6 text-[11px] text-muted-foreground -mt-1">
+                                                    Solver time {data.computation_time.toFixed(2)}s
+                                                </p>
+                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {stageIcon(routeState)}
+                                                <span className={cn(routeState === "idle" && "text-muted-foreground")}>
+                                                    {routesDone ? "Road routes generated" : "Generating road routes"}
+                                                    {routeState !== "idle" && total > 0 && (
+                                                        <span className="text-muted-foreground"> · {done}/{total}</span>
+                                                    )}
+                                                </span>
+                                                <span className="ml-auto tabular-nums text-muted-foreground">
+                                                    {routeTiming ? fmt(routeElapsed) : ""}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {stageIcon(routesDone ? "done" : "idle")}
+                                                <span className={cn(!routesDone && "text-muted-foreground")}>
+                                                    {routesDone ? "Visualization ready" : "Preparing visualization"}
+                                                </span>
+                                            </div>
+                                            {remainingSec != null && (
+                                                <p className="text-[11px] text-muted-foreground pt-1 border-t">
+                                                    ~{remainingSec}s remaining (based on measured speed)
+                                                </p>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </CardContent>
+                        </Card>
                     )}
 
                     {/* Results Summary (KPI) — in sidebar */}

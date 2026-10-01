@@ -156,6 +156,20 @@ export const Api = {
     }
   },
 
+  getRouteGeometryPath: async (coords: [number, number][]): Promise<Geometry> => {
+    const path = coords.map(([lon, lat]) => `${lon},${lat}`).join(';')
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${path}?overview=full&geometries=geojson`
+    try {
+      const response = await axios.get(url)
+      const geometry = response.data?.routes?.[0]?.geometry
+      if (geometry) return geometry as Geometry
+      throw new Error('No route found by OSRM')
+    } catch (error) {
+      console.error('OSRM path request failed (falling back to straight lines):', error)
+      return { type: 'LineString', coordinates: coords }
+    }
+  },
+
   // ==========================================================
   // 👆 PERBAIKAN SELESAI 👆
   // ==========================================================
