@@ -32,10 +32,13 @@ function MapAutoResize() {
     const t1 = setTimeout(handleResize, 50)
     const t2 = setTimeout(handleResize, 300)
     window.addEventListener('resize', handleResize)
+    const ro = new ResizeObserver(handleResize)
+    ro.observe(map.getContainer())
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
       window.removeEventListener('resize', handleResize)
+      ro.disconnect()
     }
   }, [map])
   return null
@@ -174,11 +177,16 @@ export default function OptimizeResultMap({
               >
                 {/* Hilangkan tooltip saat mode export agar bersih */}
                 {!showOnlyHighlighted && (
-                  <Tooltip direction='top' offset={[0, -32]}>
-                    <div className='text-xs'>
-                      <div className='font-bold uppercase'>{n.kind}</div>
-                      <div>{n.name ?? n.id}</div>
-                      {n.kind === 'park' && <div>Demand: {n.demand?.toLocaleString()} L</div>}
+                  <Tooltip direction='top' offset={[0, -32]} className='map-tooltip'>
+                    <div className='map-tooltip-body'>
+                      <div className='map-tooltip-kind'>{n.kind}</div>
+                      <div className='map-tooltip-title'>{n.name ?? n.id}</div>
+                      {n.kind === 'park' && (
+                        <div className='map-tooltip-row'>
+                          <span>Demand</span>
+                          <strong>{n.demand?.toLocaleString()} L</strong>
+                        </div>
+                      )}
                     </div>
                   </Tooltip>
                 )}

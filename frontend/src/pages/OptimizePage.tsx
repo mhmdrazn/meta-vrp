@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Api } from "../lib/api";
 import type { OptimizeResponse, Node, Geometry, Dataset } from "../types";
-import { minutesToHHMM } from "../lib/format";
+import { minutesToHHMM, formatNodeName } from "../lib/format";
 import { cn, getVehicleColor } from "../lib/utils";
 import NodesMapSelector from "../components/NodesMapSelector";
 import { useDataset } from "../stores/dataset";
@@ -364,7 +364,7 @@ export default function OptimizePage() {
                 route.sequence.forEach((id, idx) => {
                     const rawId = id.split("#")[0];
                     const node = nodesById.get(rawId);
-                    const nodeName = node?.name ?? rawId;
+                    const nodeName = formatNodeName(node?.name ?? rawId);
                     let extraInfo = "";
                     if (node?.kind === "depot") extraInfo = " [DEPOT]";
                     else if (node?.kind === "refill") extraInfo = " [REFILL]";
@@ -414,6 +414,10 @@ export default function OptimizePage() {
         ? data.routes.filter((r) => selectedVehicleIds.has(r.vehicle_id))
         : [];
 
+    const allRoutesVisible =
+        !!data?.routes?.length &&
+        data.routes.every((r) => selectedVehicleIds.has(r.vehicle_id));
+
     // PDF export always needs the full route set (it isolates one vehicle at a time
     // via highlightedVehicleId), so the checkbox filter is bypassed while exporting.
     const mapResult = data
@@ -458,7 +462,7 @@ export default function OptimizePage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Map — 7 cols on lg, 8 cols on xl */}
                 <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4 z-0" ref={mapRef}>
-                    <Card className="flex flex-col">
+                    <Card className="flex flex-col flex-1">
                         <CardHeader className="flex-row items-center justify-between py-3 sm:py-4">
                             <div className="flex items-center gap-2.5 sm:gap-3">
                                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
@@ -477,7 +481,7 @@ export default function OptimizePage() {
                                 </span>
                             )}
                         </CardHeader>
-                        <CardContent className="pt-0">
+                        <CardContent className="pt-0 flex-1 flex flex-col">
                             {isLoadingNodes && (
                                 <Alert className="mt-4">
                                     <Loader2 className="animate-spin" />
@@ -492,7 +496,7 @@ export default function OptimizePage() {
                             )}
                             {nodes.length > 0 && (
                                 <div
-                                    className="rounded-lg border overflow-hidden h-[420px] sm:h-[520px] md:h-[620px] lg:h-[720px] xl:h-[800px]"
+                                    className="rounded-lg border overflow-hidden flex-1 min-h-[420px] sm:min-h-[520px] md:min-h-[620px] lg:min-h-[640px]"
                                 >
                                     {data && mapResult ? (
                                         <OptimizeResultMap
@@ -734,11 +738,11 @@ export default function OptimizePage() {
                                             Results Summary
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="space-y-3">
+                                    <CardContent className="space-y-2">
                                         {/* Primary KPI rows */}
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2 sm:gap-2.5">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2">
                                             {/* Makespan */}
-                                            <div className="p-2.5 sm:p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
                                                 <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
                                                     Makespan
                                                 </p>
@@ -748,7 +752,7 @@ export default function OptimizePage() {
                                                 </p>
                                             </div>
                                             {/* Fleet Time */}
-                                            <div className="p-2.5 sm:p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
                                                 <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
                                                     Fleet Time
                                                 </p>
@@ -758,7 +762,7 @@ export default function OptimizePage() {
                                                 </p>
                                             </div>
                                             {/* Vehicles */}
-                                            <div className="p-2.5 sm:p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
                                                 <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
                                                     Vehicles
                                                 </p>
@@ -770,7 +774,7 @@ export default function OptimizePage() {
                                                 </p>
                                             </div>
                                             {/* Feasible */}
-                                            <div className="p-2.5 sm:p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
                                                 <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
                                                     Feasible
                                                 </p>
@@ -794,16 +798,16 @@ export default function OptimizePage() {
                                                     exit={{ opacity: 0, height: 0 }}
                                                     className="overflow-hidden"
                                                 >
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2 pt-1">
-                                                        <div className="p-2.5 rounded-lg bg-muted/50 space-y-0.5">
+                                                    <div className="grid grid-cols-3 gap-2 pt-1">
+                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
                                                             <p className="text-[10px] text-muted-foreground">
-                                                                Workload Variation (Std Dev)
+                                                                Workload Std Dev
                                                             </p>
                                                             <p className="text-xs sm:text-sm font-semibold">
                                                                 {data.route_time_std?.toFixed(2) ?? "-"} min
                                                             </p>
                                                         </div>
-                                                        <div className="p-2.5 rounded-lg bg-muted/50 space-y-0.5">
+                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
                                                             <p className="text-[10px] text-muted-foreground">
                                                                 Refill Visits
                                                             </p>
@@ -811,9 +815,9 @@ export default function OptimizePage() {
                                                                 {data.refill_visits ?? "-"}
                                                             </p>
                                                         </div>
-                                                        <div className="p-2.5 rounded-lg bg-muted/50 space-y-0.5">
+                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
                                                             <p className="text-[10px] text-muted-foreground">
-                                                                Computation Time
+                                                                Planning Time
                                                             </p>
                                                             <p className="text-xs sm:text-sm font-semibold">
                                                                 {data.computation_time?.toFixed(2) ?? "-"} s
@@ -860,41 +864,58 @@ export default function OptimizePage() {
                                         <ListTree className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                                         Route Details
                                     </CardTitle>
-                                    <span className="text-xs sm:text-sm text-muted-foreground">
-                                        {totalStops} stops
-                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs sm:text-sm text-muted-foreground">
+                                            {totalStops} stops
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-3 text-xs font-medium"
+                                            onClick={
+                                                allRoutesVisible
+                                                    ? handleClearAllVehicles
+                                                    : handleSelectAllVehicles
+                                            }
+                                        >
+                                            {allRoutesVisible ? (
+                                                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+                                            ) : (
+                                                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                            )}
+                                            {allRoutesVisible ? "Hide all" : "Show all"}
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <div className="max-w-full overflow-x-auto touch-pan-x">
                                 <Table className="min-w-[720px] md:min-w-[850px] lg:min-w-[900px]">
                                     <TableHeader>
                                         <TableRow className="bg-gradient-to-r from-primary/10 to-primary/5 hover:bg-gradient-to-r hover:from-primary/15 hover:to-primary/10 border-b-2 border-primary/20">
-                                            <TableHead className="w-[100px] font-semibold text-primary">
+                                            <TableHead className="w-[130px] whitespace-nowrap text-left font-semibold text-primary">
                                                 Vehicle
                                             </TableHead>
-                                            <TableHead className="w-[140px] font-semibold text-primary">
+                                            <TableHead className="w-[150px] whitespace-nowrap text-center font-semibold text-primary">
                                                 Total Time (min)
                                             </TableHead>
-                                            <TableHead className="w-[100px] font-semibold text-primary">
+                                            <TableHead className="w-[130px] whitespace-nowrap text-center font-semibold text-primary">
                                                 Parks Served
                                             </TableHead>
-                                            <TableHead className="w-[100px] font-semibold text-primary">
+                                            <TableHead className="w-[130px] whitespace-nowrap text-center font-semibold text-primary">
                                                 Refill Visits
                                             </TableHead>
-                                            <TableHead className="font-semibold text-primary">
+                                            <TableHead className="whitespace-nowrap text-left font-semibold text-primary">
                                                 Sequence (Depot → … → Depot)
                                             </TableHead>
-                                            <TableHead className="w-[80px] text-right font-semibold text-primary">
+                                            <TableHead className="w-[90px] whitespace-nowrap text-center font-semibold text-primary">
                                                 Action
                                             </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredRoutes.map((r) => {
+                                        {data.routes.map((r) => {
                                             const color = getVehicleColor(r.vehicle_id);
-                                            const isHighlighted =
-                                                selectedVehicleIds.size === 1 &&
-                                                selectedVehicleIds.has(r.vehicle_id);
+                                            const isHidden = !selectedVehicleIds.has(r.vehicle_id);
                                             const stats = getRouteStats(r);
 
                                             return (
@@ -902,10 +923,10 @@ export default function OptimizePage() {
                                                     key={r.vehicle_id}
                                                     className={cn(
                                                         "hover:bg-primary/5 transition-colors",
-                                                        isHighlighted && "bg-primary/10",
+                                                        isHidden && "opacity-50",
                                                     )}
                                                 >
-                                                    <TableCell className="py-3">
+                                                    <TableCell className="py-3 text-left whitespace-nowrap">
                                                         <div className="flex items-center gap-2">
                                                             <div
                                                                 className="w-3 h-3 rounded-full shadow-md ring-1 ring-white/50"
@@ -916,23 +937,23 @@ export default function OptimizePage() {
                                                             </span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-3">
+                                                    <TableCell className="py-3 text-center">
                                                         <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded text-sm font-medium">
                                                             {r.total_time_min.toFixed(1)}
                                                         </span>
                                                     </TableCell>
-                                                    <TableCell className="py-3 font-medium">
+                                                    <TableCell className="py-3 font-medium text-center">
                                                         {stats.parksServed}
                                                     </TableCell>
-                                                    <TableCell className="py-3 font-medium">
+                                                    <TableCell className="py-3 font-medium text-center">
                                                         {stats.refillVisits}
                                                     </TableCell>
-                                                    <TableCell className="text-xs py-3">
-                                                        <div className="max-w-md">
+                                                    <TableCell className="text-xs py-3 text-left">
+                                                        <div className="w-full">
                                                             {r.sequence.map((id, idx) => {
                                                                 const rawId = id.split("#")[0];
                                                                 const node = nodesById.get(rawId);
-                                                                const name = node?.name ?? rawId;
+                                                                const name = formatNodeName(node?.name ?? rawId);
                                                                 return (
                                                                     <span key={`${id}-${idx}`}>
                                                                         {idx > 0 && " → "}
@@ -942,40 +963,26 @@ export default function OptimizePage() {
                                                             })}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-right py-3">
+                                                    <TableCell className="text-center py-3">
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
                                                                     <Button
-                                                                        variant={
-                                                                            isHighlighted
-                                                                                ? "default"
-                                                                                : "ghost"
-                                                                        }
+                                                                        variant="ghost"
                                                                         size="icon"
                                                                         className="h-8 w-8"
-                                                                        onClick={() => {
-                                                                            if (isHighlighted) {
-                                                                                handleSelectAllVehicles();
-                                                                            } else {
-                                                                                setSelectedVehicleIds(
-                                                                                    new Set([r.vehicle_id]),
-                                                                                );
-                                                                                setHighlightedVehicleId(r.vehicle_id);
-                                                                            }
-                                                                        }}
+                                                                        aria-label={isHidden ? "Show route" : "Hide route"}
+                                                                        onClick={() => toggleVehicleVisibility(r.vehicle_id)}
                                                                     >
-                                                                        {isHighlighted ? (
-                                                                            <Eye className="h-4 w-4" />
-                                                                        ) : (
+                                                                        {isHidden ? (
                                                                             <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                                                        ) : (
+                                                                            <Eye className="h-4 w-4" />
                                                                         )}
                                                                     </Button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    {isHighlighted
-                                                                        ? "Show all routes"
-                                                                        : "Focus this route"}
+                                                                    {isHidden ? "Show route on map" : "Hide route from map"}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>

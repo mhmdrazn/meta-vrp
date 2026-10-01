@@ -81,9 +81,11 @@ export default function MapLegend({ vehicleFilter }: MapLegendProps) {
                 <svg
                   className='w-2.5 h-2.5 text-green-600'
                   viewBox='0 0 24 24'
-                  fill='none'
+                  fill='currentColor'
                   stroke='currentColor'
-                  strokeWidth='3'
+                  strokeWidth='2'
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
                 >
                   <path d='M8 19h8a4 4 0 0 0 3.8-5.2 6 6 0 0 0-4-11.5 6 6 0 0 0-11.5 3.6C2.8 7.9 3 12.1 8 19Z' />
                   <path d='M12 19v3' />

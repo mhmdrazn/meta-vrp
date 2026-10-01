@@ -6,6 +6,8 @@ import type { Geometry } from 'geojson'
 import L from 'leaflet'
 import { getDemandColor } from '../lib/utils'
 
+const PARK_GREEN = '#16a34a'
+
 type Props = {
   nodes: Node[]
   selected: Set<string>
@@ -18,7 +20,12 @@ function MapAutoResize() {
     setTimeout(() => map.invalidateSize(), 0)
     const onResize = () => map.invalidateSize()
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    const ro = new ResizeObserver(onResize)
+    ro.observe(map.getContainer())
+    return () => {
+      window.removeEventListener('resize', onResize)
+      ro.disconnect()
+    }
   }, [map])
   return null
 }
@@ -34,12 +41,12 @@ const createTreeIcon = (isSelected: boolean, color: string) =>
       width: 32px; height: 32px;
       background-color: white; border-radius: 50%;
       /* Gunakan warna dinamis (color) jika tidak dipilih */
-      border: 2px solid ${isSelected ? '#2563eb' : color};
+      border: 2px solid ${isSelected ? PARK_GREEN : color};
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     ">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-        fill="${isSelected ? '#2563eb' : color}"
-        stroke="${isSelected ? '#2563eb' : color}"
+        fill="${isSelected ? PARK_GREEN : color}"
+        stroke="${isSelected ? PARK_GREEN : color}"
         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 19h8a4 4 0 0 0 3.8-5.2 6 6 0 0 0-4-11.5 6 6 0 0 0-11.5 3.6C2.8 7.9 3 12.1 8 19Z"/><path d="M12 19v3"/>
       </svg>
@@ -78,8 +85,8 @@ export default function NodesMapSelector({ nodes, selected, onToggle }: Props) {
         // 1. Hitung warna berdasarkan demand
         const demandColor = getDemandColor(n.demand)
 
-        // 2. Tentukan warna akhir (Biru jika dipilih, warna demand jika tidak)
-        const finalColor = isSel ? '#1d4ed8' : demandColor
+        // 2. Tentukan warna akhir (Hijau jika dipilih, warna demand jika tidak)
+        const finalColor = isSel ? PARK_GREEN : demandColor
 
         const geoJsonStyle = {
           color: finalColor,
@@ -107,11 +114,14 @@ export default function NodesMapSelector({ nodes, selected, onToggle }: Props) {
               icon={createTreeIcon(isSel, demandColor)}
               eventHandlers={{ click: () => onToggle(n.id) }}
             >
-              <Tooltip direction='top' offset={[0, -32]}>
-                <div className='text-xs'>
-                  <div className='font-bold'>{n.name ?? n.id}</div>
-                  <div>Kebutuhan: {n.demand?.toLocaleString()} L</div>
-                  <div>{isSel ? '✅ Terpilih' : '⬜ Klik untuk pilih'}</div>
+              <Tooltip direction='top' offset={[0, -32]} className='map-tooltip'>
+                <div className='map-tooltip-body'>
+                  <div className='map-tooltip-title'>{n.name ?? n.id}</div>
+                  <div className='map-tooltip-row'>
+                    <span>Demand</span>
+                    <strong>{n.demand?.toLocaleString()} L</strong>
+                  </div>
+                  <div className='map-tooltip-badge'>{isSel ? 'Selected' : 'Click to select'}</div>
                 </div>
               </Tooltip>
             </Marker>

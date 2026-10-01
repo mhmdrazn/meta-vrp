@@ -52,8 +52,8 @@ def _spec_for(dataset_id: str, label: str, processed_dir: str) -> DatasetSpec:
 # Registry: keep in one place so adding a Dataset C is a one-line change.
 def _all_specs(processed_dir: str) -> List[DatasetSpec]:
     return [
-        _spec_for("dataset_a", "Dataset A", processed_dir),
-        _spec_for("dataset_b", "Dataset B", processed_dir),
+        _spec_for("dataset_a", "Service Area A", processed_dir),
+        _spec_for("dataset_b", "Service Area B", processed_dir),
     ]
 
 
