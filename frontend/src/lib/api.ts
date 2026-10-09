@@ -31,7 +31,9 @@ function haversineMeters([lon1, lat1]: [number, number], [lon2, lat2]: [number, 
   const toRad = (d: number) => (d * Math.PI) / 180
   const dLat = toRad(lat2 - lat1)
   const dLon = toRad(lon2 - lon1)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
@@ -180,7 +182,8 @@ export const Api = {
     } catch (error) {
       console.error('OSRM path request failed (falling back to straight lines):', error)
       let distance_m = 0
-      for (let i = 1; i < coords.length; i++) distance_m += haversineMeters(coords[i - 1], coords[i])
+      for (let i = 1; i < coords.length; i++)
+        distance_m += haversineMeters(coords[i - 1], coords[i])
       return { geometry: { type: 'LineString', coordinates: coords }, distance_m }
     }
   },
