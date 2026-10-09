@@ -83,6 +83,14 @@ fitness = total_time
 
 Hard-constraint violations carry a very large penalty (10^6), so any feasible plan outranks any infeasible one.
 
+Notes on the objective:
+
+- `total_time` is the **total fleet time**: the sum of all vehicle route durations, including travel, watering service, and refilling. It is the dominant term of the fitness.
+- The 5-minute physical refill time is already part of each route duration. The additional 2-point penalty per refill visit only discourages unnecessary refill stops.
+- The balance term (0.1 times the standard deviation of route durations) nudges the search toward an even workload across trucks.
+- **Makespan (completion time) is not minimized directly.** It is reported as a result metric, and it tends to improve only as a side effect of balanced, short routes.
+- Reported fitness always describes the final plan: it is recomputed after the closing rebalance step, so it stays consistent with the reported total time, makespan, and refill visits.
+
 ### Algorithms
 
 | Algorithm | Summary |
@@ -110,7 +118,7 @@ Total wait time is the budget plus a small overhead for data loading, post-proce
 | Metric | Meaning |
 | --- | --- |
 | Makespan | Completion time of the longest route, that is, when the last truck is back at the depot. |
-| Total fleet operating time | Sum of all active route durations. |
+| Total fleet operating time | Sum of all active route durations (travel, watering, and refilling). This is the main component of the fitness. |
 | Vehicles assigned | Active trucks out of the fleet size requested. |
 | Operationally feasible | Whether every park is fully served within the operating window. |
 | Workload Std Dev | Standard deviation of route durations. Lower values mean a more even workload across trucks. |
@@ -367,13 +375,13 @@ Two service areas in Surabaya, Indonesia, are included. They appear in the inter
 | Service Area A | `dataset_a` | 46 | 41 | Baseline fleet of 10 trucks in experiments. |
 | Service Area B | `dataset_b` | 51 | 25 | Baseline fleet of 5 trucks in experiments. |
 
-Each dataset consists of a node file (`id`, `name`, `lat`, `lon`, `type`, `demand_liters`, `service_min`) and a pairwise travel-time matrix in minutes. Runtime files live in `backend/data/` as JSON plus NumPy arrays; the source CSVs live in `data/`.
+Each dataset consists of a node file (`id`, `name`, `lat`, `lon`, `type`, `demand_liters`, `service_min`) and a pairwise travel-time matrix in minutes. The experiment notebooks additionally use a road-distance matrix in kilometers (`data/dataset_*_distance_matrix.npy`) to report total distance. Runtime files live in `backend/data/` as JSON plus NumPy arrays; the source CSVs and matrices live in `data/`.
 
 To add or rebuild a dataset:
 
 ```bash
-# Build a travel-time matrix from node coordinates using OSRM
-python scripts/build_time_matrix.py --help
+# Build a travel-time matrix (and optionally a road-distance matrix) from node coordinates using OSRM
+python scripts/build_time_matrix.py --nodes data/dataset_a.csv --out data/time_matrix_a.csv --distance-out data/dataset_a_distance_matrix.npy
 
 # Convert CSV nodes and matrices into the runtime JSON + NPY format (validates the result)
 python scripts/convert_dataset.py --help
@@ -398,7 +406,8 @@ Experiment protocol:
 
 - 20 independent runs per configuration with matched seeds (`7, 14, 21, ..., 140`), so algorithms are compared on identical starting conditions.
 - Metrics per run: fitness, total time, makespan, route-time standard deviation, active vehicles, refill visits, computation time, and feasibility.
-- The experiment notebooks live in a local `experiments/` directory that is excluded from version control. Their results are exported to CSV in `backend/data/experiments/`.
+- The experiment notebooks live in the `experiments/` directory. Their results are exported to CSV in `backend/data/experiments/`.
+- Each run also reports total road distance (km) alongside total time, makespan, and the other metrics.
 
 > The public web application uses a shortened demonstration configuration. Results reported in the study were generated through controlled offline experiments.
 

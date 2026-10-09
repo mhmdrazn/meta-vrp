@@ -26,6 +26,15 @@ export interface OptimizePayload {
 
 const OSRM_BASE_URL = 'https://router.project-osrm.org'
 
+function haversineMeters([lon1, lat1]: [number, number], [lon2, lat2]: [number, number]): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
 // Dev lokal: kosong -> pakai '/api' (diteruskan oleh proxy Vite ke backend lokal).
 // Produksi: isi VITE_API_BASE_URL dengan URL backend (mis. saat FE & BE dua project Vercel terpisah).
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
@@ -156,17 +165,23 @@ export const Api = {
     }
   },
 
-  getRouteGeometryPath: async (coords: [number, number][]): Promise<Geometry> => {
+  getRouteGeometryPath: async (
+    coords: [number, number][],
+  ): Promise<{ geometry: Geometry; distance_m: number }> => {
     const path = coords.map(([lon, lat]) => `${lon},${lat}`).join(';')
     const url = `${OSRM_BASE_URL}/route/v1/driving/${path}?overview=full&geometries=geojson`
     try {
       const response = await axios.get(url)
-      const geometry = response.data?.routes?.[0]?.geometry
-      if (geometry) return geometry as Geometry
+      const route = response.data?.routes?.[0]
+      if (route?.geometry) {
+        return { geometry: route.geometry as Geometry, distance_m: Number(route.distance) || 0 }
+      }
       throw new Error('No route found by OSRM')
     } catch (error) {
       console.error('OSRM path request failed (falling back to straight lines):', error)
-      return { type: 'LineString', coordinates: coords }
+      let distance_m = 0
+      for (let i = 1; i < coords.length; i++) distance_m += haversineMeters(coords[i - 1], coords[i])
+      return { geometry: { type: 'LineString', coordinates: coords }, distance_m }
     }
   },
 

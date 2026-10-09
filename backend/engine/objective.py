@@ -12,7 +12,7 @@ Formula ported directly from notebook cell 6 (evaluate_solution):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,7 +56,6 @@ def evaluate_solution(
 
     park_ids = [nid for nid, n in nodes.items() if n.type == "park"]
     refill_set = set(nid for nid, n in nodes.items() if n.type == "refill")
-    park_set = set(park_ids)
 
     # 1. Demand fulfillment constraint
     if delivery_map is not None:

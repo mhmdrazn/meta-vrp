@@ -398,7 +398,7 @@ def aco_optimize(
     weights_obj = ObjectiveWeights()
 
     def objective(routes: List[List[str]]) -> float:
-        return search_objective(routes, nodes, tm, weights_obj)
+        return search_objective(routes, nodes, tm, weights=weights_obj)
 
     def finalize(routes: List[List[str]]) -> List[List[str]]:
         """Apply safety passes (identical to ALNS) for feasibility."""

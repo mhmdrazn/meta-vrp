@@ -3,10 +3,10 @@
     "dataset_id": "dataset_a",
     "generated_from_nodes": "data/dataset_a.csv",
     "generated_from_matrix": "data/time_matrix_a.csv",
-    "generated_at": "2026-08-03T04:34:49.654648+00:00",
+    "generated_at": "2026-10-09T02:22:08.789941+00:00",
     "node_count": 88,
     "nodes_csv_sha256_prefix": "d65277404e237585",
-    "matrix_csv_sha256_prefix": "0247b3566b494eff",
+    "matrix_csv_sha256_prefix": "4d157f339fc8c460",
     "refill_service_min": 12.0,
     "time_unit": "minutes",
     "volume_unit": "liters"

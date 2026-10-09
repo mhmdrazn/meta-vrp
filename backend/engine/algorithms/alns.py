@@ -251,7 +251,7 @@ def alns_optimize(
     weights_obj = ObjectiveWeights()
 
     def objective(routes: List[List[str]]) -> float:
-        return search_objective(routes, nodes, tm, weights_obj)
+        return search_objective(routes, nodes, tm, weights=weights_obj)
 
     # init
     best = deepcopy_routes(init_routes)
@@ -278,10 +278,7 @@ def alns_optimize(
         k_remove = rng.randint(cfg.k_remove_min, cfg.k_remove_max)
 
         # --- DESTROY ---
-        try:
-            removed, partial = d_op(current, nodes, tm, k_remove, groups, rng=rng)
-        except TypeError:
-            removed, partial = d_op(current, nodes, tm, k_remove, groups)
+        removed, partial = d_op(current, nodes, tm, k_remove, groups)
         if cfg.use_tabu_on_removed_nodes and tabu.contains_any(removed):
             continue
 
@@ -298,35 +295,19 @@ def alns_optimize(
                 refill_ids=refill_ids,
             )
         else:
-            try:
-                repaired = r_op(
-                    partial,
-                    removed,
-                    nodes,
-                    tm,
-                    {
-                        "vehicle_capacity": vehicle_capacity,
-                        "refill_ids": refill_ids,
-                        "allow_refill": allow_refill,
-                        "depot_id": depot_id,
-                    },
-                    groups,
-                    rng=rng,
-                )
-            except TypeError:
-                repaired = r_op(
-                    partial,
-                    removed,
-                    nodes,
-                    tm,
-                    {
-                        "vehicle_capacity": vehicle_capacity,
-                        "refill_ids": refill_ids,
-                        "allow_refill": allow_refill,
-                        "depot_id": depot_id,
-                    },
-                    groups,
-                )
+            repaired = r_op(
+                partial,
+                removed,
+                nodes,
+                tm,
+                {
+                    "vehicle_capacity": vehicle_capacity,
+                    "refill_ids": refill_ids,
+                    "allow_refill": allow_refill,
+                    "depot_id": depot_id,
+                },
+                groups,
+            )
         repaired, _ins = ensure_all_routes_capacity(
             repaired, nodes, vehicle_capacity, refill_ids, tm, depot_id
         )

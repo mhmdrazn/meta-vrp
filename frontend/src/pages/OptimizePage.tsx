@@ -130,6 +130,7 @@ export default function OptimizePage() {
     const [optWallMs, setOptWallMs] = useState<number | null>(null);
     const [routeProgress, setRouteProgress] = useState({ done: 0, total: 0 });
     const [routeTiming, setRouteTiming] = useState<{ start: number; end: number | null } | null>(null);
+    const [routeDistanceM, setRouteDistanceM] = useState(0);
     const [now, setNow] = useState(() => performance.now());
 
     const {
@@ -173,6 +174,7 @@ export default function OptimizePage() {
         setOptWallMs(null);
         setRouteProgress({ done: 0, total: 0 });
         setRouteTiming(null);
+        setRouteDistanceM(0);
         setIsFetchingRoutes(false);
     };
 
@@ -265,6 +267,7 @@ export default function OptimizePage() {
             setVehicleRoutes({});
             setRouteProgress({ done: 0, total });
             setRouteTiming({ start, end: null });
+            setRouteDistanceM(0);
 
             const slots: Record<number, (Geometry | undefined)[]> = {};
             for (const [vid, n] of Object.entries(slotCounts)) {
@@ -276,9 +279,10 @@ export default function OptimizePage() {
                 while (!cancelled) {
                     const task = tasks[next++];
                     if (!task) return;
-                    const geometry = await Api.getRouteGeometryPath(task.coords);
+                    const { geometry, distance_m } = await Api.getRouteGeometryPath(task.coords);
                     if (cancelled) return;
                     slots[task.vehId][task.slot] = geometry;
+                    setRouteDistanceM((d) => d + distance_m);
                     setVehicleRoutes((prev) => ({
                         ...prev,
                         [task.vehId]: slots[task.vehId].filter((g): g is Geometry => !!g),
@@ -868,63 +872,80 @@ export default function OptimizePage() {
                                 ref={summaryRef}
                             >
                                 <Card>
-                                    <CardHeader className="py-3">
+                                    <CardHeader className="py-3 flex-row items-center justify-between space-y-0">
                                         <CardTitle className="text-base">
                                             Results Summary
                                         </CardTitle>
+                                        <span
+                                            className={cn(
+                                                "rounded-full px-3 py-1 text-xs font-medium",
+                                                data.feasible === false
+                                                    ? "bg-red-500/10 text-red-700 dark:text-red-400"
+                                                    : "bg-green-500/10 text-green-700 dark:text-green-400",
+                                            )}
+                                        >
+                                            Feasible:{" "}
+                                            <span className="font-bold">
+                                                {data.feasible === false ? "No" : "Yes"}
+                                            </span>
+                                        </span>
                                     </CardHeader>
                                     <CardContent className="space-y-2">
-                                        {/* Primary KPI rows */}
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2">
-                                            {/* Makespan */}
-                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
-                                                <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
-                                                    Makespan
-                                                </p>
-                                                <p className="text-base sm:text-lg font-bold text-green-700 dark:text-green-300">
-                                                    {data.makespan?.toFixed(1) ?? data.objective_time_min}
-                                                    <span className="text-[10px] font-normal ml-0.5">min</span>
-                                                </p>
-                                            </div>
-                                            {/* Fleet Time */}
-                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
-                                                <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
-                                                    Fleet Time
-                                                </p>
-                                                <p className="text-base sm:text-lg font-bold text-green-700 dark:text-green-300">
-                                                    {data.total_time?.toFixed(1) ?? "-"}
-                                                    <span className="text-[10px] font-normal ml-0.5">min</span>
-                                                </p>
-                                            </div>
-                                            {/* Vehicles */}
-                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
-                                                <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
-                                                    Vehicles
-                                                </p>
-                                                <p className="text-base sm:text-lg font-bold text-green-700 dark:text-green-300">
-                                                    {data.active_vehicles ?? data.vehicle_used}
-                                                    <span className="text-[10px] font-normal ml-0.5">
-                                                        / {lastPayload?.num_vehicles ?? numVehicles}
-                                                    </span>
-                                                </p>
-                                            </div>
-                                            {/* Feasible */}
-                                            <div className="p-2 sm:p-2.5 rounded-lg border border-green-500/30 bg-green-500/10">
-                                                <p className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-400 mb-0.5 sm:mb-1">
-                                                    Feasible
-                                                </p>
-                                                <p className={cn(
-                                                    "text-base sm:text-lg font-bold",
-                                                    data.feasible === false
-                                                        ? "text-red-600 dark:text-red-400"
-                                                        : "text-green-700 dark:text-green-300",
-                                                )}>
-                                                    {data.feasible === false ? "No" : "Yes"}
-                                                </p>
-                                            </div>
+                                        {/* Primary metrics */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[
+                                                {
+                                                    label: "Total Fleet Time",
+                                                    value: data.total_time?.toFixed(1) ?? "-",
+                                                    unit: "min",
+                                                    hint: "Combined time of all vehicles",
+                                                },
+                                                {
+                                                    label: "Completion Time",
+                                                    value: (data.makespan ?? data.objective_time_min)?.toFixed(1) ?? "-",
+                                                    unit: "min",
+                                                    hint: "Until the last vehicle finishes",
+                                                },
+                                                {
+                                                    label: "Total Distance",
+                                                    value: routeTiming?.end
+                                                        ? (routeDistanceM / 1000).toFixed(1)
+                                                        : "…",
+                                                    unit: "km",
+                                                    hint: routeTiming?.end
+                                                        ? "Road distance of all vehicles"
+                                                        : "Calculating from road routes",
+                                                },
+                                                {
+                                                    label: "Vehicles Used",
+                                                    value: String(data.active_vehicles ?? data.vehicle_used),
+                                                    unit: `/ ${lastPayload?.num_vehicles ?? numVehicles}`,
+                                                    hint: "Active / Available",
+                                                },
+                                            ].map((m) => (
+                                                <div
+                                                    key={m.label}
+                                                    className="p-2.5 rounded-xl border border-green-500/30 bg-green-500/10"
+                                                >
+                                                    <p className="text-xs font-medium text-green-700 dark:text-green-400">
+                                                        {m.label}
+                                                    </p>
+                                                    <p className="text-xl font-bold text-green-700 dark:text-green-300 leading-tight mt-0.5">
+                                                        {m.value}
+                                                        {m.unit && (
+                                                            <span className="text-xs font-normal ml-1">{m.unit}</span>
+                                                        )}
+                                                    </p>
+                                                    {m.hint && (
+                                                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                            {m.hint}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
 
-                                        {/* Secondary Metrics */}
+                                        {/* Secondary metrics */}
                                         <AnimatePresence>
                                             {showAdvanced && (
                                                 <motion.div
@@ -934,30 +955,30 @@ export default function OptimizePage() {
                                                     className="overflow-hidden"
                                                 >
                                                     <div className="grid grid-cols-3 gap-2 pt-1">
-                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
-                                                            <p className="text-[10px] text-muted-foreground">
-                                                                Workload Std Dev
-                                                            </p>
-                                                            <p className="text-xs sm:text-sm font-semibold">
-                                                                {data.route_time_std?.toFixed(2) ?? "-"} min
-                                                            </p>
-                                                        </div>
-                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
-                                                            <p className="text-[10px] text-muted-foreground">
-                                                                Refill Visits
-                                                            </p>
-                                                            <p className="text-xs sm:text-sm font-semibold">
-                                                                {data.refill_visits ?? "-"}
-                                                            </p>
-                                                        </div>
-                                                        <div className="p-2 rounded-lg bg-muted/50 space-y-0.5">
-                                                            <p className="text-[10px] text-muted-foreground">
-                                                                Planning Time
-                                                            </p>
-                                                            <p className="text-xs sm:text-sm font-semibold">
-                                                                {data.computation_time?.toFixed(2) ?? "-"} s
-                                                            </p>
-                                                        </div>
+                                                        {[
+                                                            {
+                                                                label: "Workload Std Dev",
+                                                                value: `${data.route_time_std?.toFixed(2) ?? "-"} min`,
+                                                            },
+                                                            {
+                                                                label: "Refill Visits",
+                                                                value: String(data.refill_visits ?? "-"),
+                                                            },
+                                                            {
+                                                                label: "Planning Time",
+                                                                value: `${data.computation_time?.toFixed(2) ?? "-"} s`,
+                                                            },
+                                                        ].map((m) => (
+                                                            <div
+                                                                key={m.label}
+                                                                className="p-2 rounded-xl bg-muted/50 space-y-0.5"
+                                                            >
+                                                                <p className="text-[10px] text-muted-foreground">
+                                                                    {m.label}
+                                                                </p>
+                                                                <p className="text-sm font-semibold">{m.value}</p>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </motion.div>
                                             )}

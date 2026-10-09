@@ -392,7 +392,7 @@ def solve(
     time_limit_sec: float = 30.0,
     seed: int = 42,
     alns_cfg: Optional[ALNSConfig] = None,
-    aco_cfg: Optional[object] = None,
+    aco_cfg: Optional[ACOConfig] = None,
     hybrid_cfg: Optional[HybridConfig] = None,
     alns_time_frac: float = 0.9,
 ) -> dict:
@@ -447,7 +447,6 @@ def solve(
 
         park_ids = [nid for nid, n in nodes.items() if n.type == "park"]
         refill_set = set(refill_ids)
-        park_set = set(park_ids)
 
         if algorithm == "alns_standard":
             max_iter = alns_cfg.max_iter if (alns_cfg and alns_cfg.max_iter) else None
@@ -478,10 +477,6 @@ def solve(
             destroys = [destroy_random, destroy_worst, destroy_shaw]
             dw = [1.0] * len(destroys)
             rw = [1.0, 1.0]
-            ds = [0.0] * len(destroys)
-            rs = [0.0] * 2
-            dc = [0] * len(destroys)
-            rc = [0] * 2
             T = 100.0
 
             for it in _budget_loop(time_limit_sec, max_iter):
@@ -610,19 +605,14 @@ def solve(
                 new_fit = evaluate_solution(new_sol, nodes, tm, delivery_map=new_dmap)[
                     0
                 ]
-
-                score = 0.0
                 if new_fit < best_fit - 1e-6:
                     best_fit = new_fit
                     best_dmap = dict(new_dmap)
                     cur_dmap, cur_fit = new_dmap, new_fit
-                    score = 3.0
                 elif new_fit < cur_fit - 1e-6:
                     cur_dmap, cur_fit = new_dmap, new_fit
-                    score = 2.0
                 elif rng.random() < np.exp(-(new_fit - cur_fit) / max(T, 1e-6)):
                     cur_dmap, cur_fit = new_dmap, new_fit
-                    score = 1.0
 
                 T = max(T * 0.995, 1e-3)
 
@@ -847,6 +837,7 @@ def solve(
                         iter_best_fit = fit_val
                         iter_best = (sol_a, dmap_a)
 
+                assert iter_best is not None
                 if iter_best_fit < best_fit:
                     best_fit = iter_best_fit
                     best_sol = [r[:] for r in iter_best[0]]
@@ -866,6 +857,7 @@ def solve(
                             pher[p_a][p_b] += deposit
                             pher[p_b][p_a] += deposit
 
+            assert best_sol is not None and best_dmap is not None
             routes = best_sol
             final_dmap = best_dmap
 
@@ -1211,7 +1203,6 @@ def solve(
     # 4) Configure algorithm-specific time budgets
     # All algorithms now get the full time budget (hybrid no longer needs a split)
     alns_time = time_limit_sec
-    improve_time = 0.0
 
     if alns_cfg is None:
         alns_cfg = ALNSConfig(time_limit_sec=alns_time, seed=seed)

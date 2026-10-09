@@ -39,7 +39,7 @@ def load_nodes_csv(
     nodes: Dict[str, Node] = {}
     ids_in_order: List[str] = []
 
-    for _, r in df.iterrows():
+    for r in df.to_dict("records"):
         nid = str(r["id"]).strip()  # ⬅️ jadikan string + trim
         ntype = str(r["type"]).strip().lower()  # ⬅️ trim + lower
         node = Node(

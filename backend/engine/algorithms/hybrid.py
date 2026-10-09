@@ -268,7 +268,7 @@ def hybrid_optimize(
     weights_obj = ObjectiveWeights()
 
     def objective(routes: List[List[str]]) -> float:
-        return search_objective(routes, nodes, tm, weights_obj)
+        return search_objective(routes, nodes, tm, weights=weights_obj)
 
     # --- Phase 1: Initialise from greedy_construct + pheromone seeding ---
     current = deepcopy_routes(init_routes)
